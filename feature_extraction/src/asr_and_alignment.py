@@ -18,7 +18,7 @@ import scipy.signal
 import soundfile as sf
 import librosa
 
-from src.config import PipelineConfig
+from feature_extraction.src.config import PipelineConfig
 
 logger = logging.getLogger(__name__)
 

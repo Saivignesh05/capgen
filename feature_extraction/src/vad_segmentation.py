@@ -11,7 +11,7 @@ import logging
 import numpy as np
 import torch
 
-from src.config import PipelineConfig
+from feature_extraction.src.config import PipelineConfig
 
 logger = logging.getLogger(__name__)
 

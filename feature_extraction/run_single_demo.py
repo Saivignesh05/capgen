@@ -4,9 +4,9 @@ import argparse
 from pathlib import Path
 import logging
 
-from pipeline import AudioAnalysisPipeline
-from src.config import PipelineConfig
-from src.evaluation import EventEvaluator
+from feature_extraction.pipeline import AudioAnalysisPipeline
+from feature_extraction.src.config import PipelineConfig
+from feature_extraction.src.evaluation import EventEvaluator
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

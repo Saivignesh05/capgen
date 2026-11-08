@@ -19,18 +19,18 @@ import logging
 import soundfile as sf
 import torch
 
-from src.config import PipelineConfig
-from src.preprocessing import AudioPreprocessor
-from src.global_analysis import GlobalAcousticAnalyzer
-from src.vad_segmentation import VoiceActivityDetector
-from src.sound_event_detection import SoundEventDetector
-from src.acoustic_changes import AcousticChangeDetector
-from src.timeline import LocalTimelineGenerator
-from src.export_json import JsonExporter
-from src.visualizer import AudioVisualizer
-from src.description import build_description
-from src.voice_profile import estimate_voice_profile
-from src.asr_and_alignment import WordAligner
+from feature_extraction.src.config import PipelineConfig
+from feature_extraction.src.preprocessing import AudioPreprocessor
+from feature_extraction.src.global_analysis import GlobalAcousticAnalyzer
+from feature_extraction.src.vad_segmentation import VoiceActivityDetector
+from feature_extraction.src.sound_event_detection import SoundEventDetector
+from feature_extraction.src.acoustic_changes import AcousticChangeDetector
+from feature_extraction.src.timeline import LocalTimelineGenerator
+from feature_extraction.src.export_json import JsonExporter
+from feature_extraction.src.visualizer import AudioVisualizer
+from feature_extraction.src.description import build_description
+from feature_extraction.src.voice_profile import estimate_voice_profile
+from feature_extraction.src.asr_and_alignment import WordAligner
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

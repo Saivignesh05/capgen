@@ -1,0 +1,37 @@
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Private or downloaded audio/data
+data/user_audio/
+data/ground_truth/
+data/vaani/
+*.wav
+*.mp3
+*.flac
+*.m4a
+
+# Downloaded model binaries and local model caches
+models/*.onnx
+models/*.jit
+models/*.pt
+models/*.pth
+models/.cache/
+.cache/
+
+# Generated analysis artifacts
+outputs/*
+!outputs/.gitkeep
+*.log

@@ -224,3 +224,5 @@ __marimo__/
 
 features-extractor-results/
 features-extractor/models/
+test_set
+.ignored_files/

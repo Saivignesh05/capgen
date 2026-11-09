@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List
-
+import argparse
 import soundfile as sf
 
 
@@ -118,7 +118,16 @@ def _print_condition_report(
 
 
 def main() -> List[Violation]:
-    directory = Path(input("Enter the directory path: ").strip()).expanduser()
+    parser = argparse.ArgumentParser(description="Validate WAV audio files.")
+    parser.add_argument(
+        "--dir",
+        type=Path,
+        required=True,
+        help="Directory containing audio files",
+    )
+    args = parser.parse_args()
+
+    directory = args.dir.expanduser()
 
     if not directory.is_dir():
         print(f"Error: '{directory}' is not a valid directory.")
@@ -136,7 +145,11 @@ def main() -> List[Violation]:
     duration_violations = _check_duration(audio_paths)
 
     _print_condition_report("Valid WAV file", len(audio_paths), wav_violations)
-    _print_condition_report("Duration strictly less than 30 seconds", len(audio_paths), duration_violations)
+    _print_condition_report(
+        "Duration strictly less than 30 seconds",
+        len(audio_paths),
+        duration_violations,
+    )
 
     all_violations = wav_violations + duration_violations
     print(f"\nTotal violation objects: {len(all_violations)}")

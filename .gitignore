@@ -226,3 +226,4 @@ features-extractor-results/
 features-extractor/models/
 test_set
 .ignored_files/
+annotation_tasks

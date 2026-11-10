@@ -34,6 +34,7 @@ SOURCES = {
     "ast-audioset": {"repo": "MIT/ast-finetuned-audioset-10-10-0.4593"},
     "phoneme-xlsr": {"repo": "facebook/wav2vec2-xlsr-53-espeak-cv-ft"},
     "speaker-xvector": {"repo": "microsoft/wavlm-base-plus-sv"},
+    "whisper-large-v3": {"repo": "openai/whisper-large-v3"},     # transcription, ~3 GB
 }
 # Licences, all permissive and none gated: Silero VAD MIT, Whisper MIT, AST BSD-3-Clause,
 # wav2vec2-XLSR phonemes Apache-2.0, WavLM-SV MIT (Microsoft UniSpeech).
@@ -270,14 +271,90 @@ class WhisperLanguage:
         x = clip.audio
         if phrases:
             x = np.concatenate([x[int(a * clip.sr):int(b * clip.sr)] for a, b in phrases])
-        feats = self.proc(x[:30 * clip.sr], sampling_rate=clip.sr, return_tensors="pt").input_features.to(self.device)
+        enc = self.proc(x[:30 * clip.sr], sampling_rate=clip.sr, return_tensors="pt",
+                        return_attention_mask=True)
+        feats = enc.input_features.to(self.device)
+        mask = getattr(enc, "attention_mask", None)
+        kw = {"attention_mask": mask.to(self.device)} if mask is not None else {}
         with self.torch.no_grad():
             logits = self.model(input_features=feats, use_cache=False,
-                                decoder_input_ids=self.torch.tensor([[self.sot]], device=self.device)).logits[0, -1]
+                                decoder_input_ids=self.torch.tensor([[self.sot]], device=self.device),
+                                **kw).logits[0, -1]
         p = self.torch.softmax(logits[self.ids].float(), -1).cpu().numpy()
         scores = {c: float(v) for c, v in zip(self.allowed, p)}
         best = max(scores, key=scores.get)
         return {"code": best, "confidence": scores[best], "scores": scores, "source": self.name}
+
+
+class WhisperTranscribe:
+    """Native-script transcription, so the word-level measures stop being optional.
+
+    The task and language are BOTH forced: left to detect, Whisper on Indic audio often
+    translates to English or romanises instead of transcribing, which is why published Indic
+    benchmarks sometimes cannot score it at all. The language comes from the LID step that has
+    already run on this clip, so the two always agree.
+
+    Clips at or under the model's 30 s window go in one pass. Longer ones are split at phrase
+    boundaries into groups of at most `window_s`, never mid-phrase, and the pieces joined.
+
+    `model` picks the checkpoint: whisper-large-v3 by default (far better on Hindi and Tamil),
+    or whisper-small to reuse the one already frozen for language ID at a real cost in accuracy.
+    """
+    LANGUAGES = {"hi": "hindi", "ta": "tamil"}
+
+    def __init__(self, ctx, model="whisper-large-v3", beams=1, window_s=30.0,
+                 max_new_tokens=440):
+        import torch
+        from transformers import WhisperForConditionalGeneration, WhisperProcessor
+        _hf_offline()
+        path = local_model(ctx["models_dir"], model, ctx["verify"])
+        self.torch, self.device, self.name = torch, ctx["device"], model
+        self.beams, self.window_s, self.max_new_tokens = beams, window_s, max_new_tokens
+        with quiet_load():
+            self.proc = WhisperProcessor.from_pretrained(path, local_files_only=True)
+            self.model = WhisperForConditionalGeneration.from_pretrained(
+                path, local_files_only=True).to(self.device).eval()
+
+    def _pass(self, x, sr, language) -> str:
+        # return_attention_mask: Whisper's pad token IS its eos token, so without a mask
+        # generate() cannot tell padding from a real end-of-text and warns. One clip at a
+        # time is never padded, so the mask the feature extractor returns is all ones -- this
+        # is the correct value, not a way of silencing the warning.
+        enc = self.proc(x, sampling_rate=sr, return_tensors="pt", return_attention_mask=True)
+        feats = enc.input_features.to(self.device)
+        mask = getattr(enc, "attention_mask", None)
+        kw = {"attention_mask": mask.to(self.device)} if mask is not None else {}
+        with self.torch.no_grad():
+            # `language=` / `task=` rather than forced_decoder_ids: the latter is deprecated and
+            # gone from newer transformers, while these two have been supported since 4.28.
+            ids = self.model.generate(feats, language=self.LANGUAGES[language], task="transcribe",
+                                      num_beams=self.beams, do_sample=False,
+                                      max_new_tokens=self.max_new_tokens, **kw)
+        return self.proc.batch_decode(ids, skip_special_tokens=True)[0].strip()
+
+    def transcribe(self, clip, phrases, language) -> dict | None:
+        if language not in self.LANGUAGES or not phrases:
+            return None                        # only the two languages this tool is built for
+        sr, win = clip.sr, self.window_s
+        groups, cur = [], []
+        for a, b in phrases:                   # split between phrases, never inside one
+            if cur and b - cur[0][0] > win:
+                groups.append(cur)
+                cur = []
+            cur.append((a, b))
+        if cur:
+            groups.append(cur)
+        parts = []
+        for grp in groups:
+            a, b = grp[0][0], grp[-1][1]
+            seg = clip.audio[int(a * sr):int(b * sr)]
+            if len(seg) < int(0.1 * sr):
+                continue
+            t = self._pass(seg, sr, language)
+            if t:
+                parts.append(t)
+        text = " ".join(parts).strip()
+        return {"text": text, "source": f"asr:{self.name}", "passes": len(groups)} if text else None
 
 
 class FolderLanguage:
@@ -631,6 +708,7 @@ LANGUAGE = {"whisper": WhisperLanguage, "folder": FolderLanguage}
 EVENTS = {"ast": ASTEvents}
 SYLLABLES = {"phonemes": PhonemeSyllables, "envelope": EnvelopeSyllables}
 SPEAKERS = {"wavlm": WavLMSpeakers}
+TRANSCRIBE = {"whisper": WhisperTranscribe}
 
 
 def build(registry: dict, spec: dict | None, ctx: dict, what: str):

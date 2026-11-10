@@ -446,6 +446,116 @@ def median_in(vf: dict, key: str, a: float = -1e9, b: float = 1e9, min_frames: i
     return float(np.median(vf[key][m])) if m.sum() >= min_frames else None
 
 
+PHONATION = {
+    # creak: the voice drops low and the pulses get irregular or noisy
+    "creak_pitch_st": -3.0, "creak_jitter_pct": 0.3, "creak_hnr_db": -2.0, "creak_cpp_db": -1.5,
+    # breath: more energy in the first harmonic, less harmonic structure
+    "breathy_h1h2_db": 3.0, "breathy_hnr_db": -2.0, "breathy_cpp_db": -1.5,
+    # press/strain: pitch up, first harmonic squeezed, harmonics strong
+    "strained_pitch_st": 3.0, "strained_h1h2_db": -3.0, "strained_hnr_db": 1.0,
+    # modal: everything close to the clip's own middle
+    "modal_pitch_st": 1.5, "modal_h1h2_db": 2.0, "modal_hnr_db": 2.0,
+    "min_support": 2,
+}
+
+
+def phonation(voice: dict | None, clip_voice: dict | None, pitch_st: float | None = None,
+              cfg: dict | None = None) -> dict | None:
+    """How one phrase's voice is produced — clear/modal, creaky, breathy or strained — judged
+    against *this clip's own* median, never against published norms.
+
+    Absolute thresholds for phonation do not transfer across languages, microphones or vowels,
+    which is why the raw numbers alone were never labelled. A within-clip contrast does
+    transfer: the same speaker on the same microphone, one phrase against the rest, which is
+    also the form the rubric asks for ("creaky voice on the second phrase").
+
+    Needs `min_support` independent measures pointing the same way, so a single noisy frame
+    cannot produce a label. `pitch_st` (the phrase's pitch above the clip median) is only
+    passed in when the second pitch tracker confirmed it — creak itself breaks pitch tracking,
+    so an unconfirmed contour must not be used as evidence for creak.
+
+    Returns {label, confirmed, support, deltas} or None when too little is measurable.
+    """
+    c = {**PHONATION, **(cfg or {})}
+    if not voice or not clip_voice:
+        return None
+
+    def d(key):
+        x, y = voice.get(key), clip_voice.get(key)
+        return None if x is None or y is None else x - y
+
+    deltas = {"pitch_st": pitch_st, "hnr_db": d("hnr_db"), "cpp_db": d("cpp_db"),
+              "h1h2_db": d("h1h2_db"), "jitter_pct": d("jitter_pct")}
+    if sum(v is not None for v in deltas.values()) < c["min_support"]:
+        return None
+
+    def le(key, lim):                                  # at or below a (negative) limit
+        v = deltas[key]
+        return v is not None and v <= lim
+
+    def ge(key, lim):
+        v = deltas[key]
+        return v is not None and v >= lim
+
+    def near(key, lim):
+        v = deltas[key]
+        return v is not None and abs(v) <= lim
+
+    def phrase(key, lim, word):
+        v = deltas[key]
+        unit = {"pitch_st": "semitones", "hnr_db": "dB", "cpp_db": "dB", "h1h2_db": "dB",
+                "jitter_pct": "points"}[key]
+        return f"{key.rsplit('_', 1)[0].replace('_', ' ')} {abs(v):.1f} {unit} {word} the clip"
+
+    # Low HNR and low CPP mean "less clean harmonics", which creak and breath share, so
+    # counting votes alone confuses the two. Each label needs a DISCRIMINATIVE primary signal
+    # -- creak: low pitch or irregular pulses; breath: a strong first harmonic; press: a
+    # squeezed one -- plus at least one corroborating measure.
+    low_pitch = lambda: le("pitch_st", c["creak_pitch_st"])                        # noqa: E731
+    high_jit = lambda: ge("jitter_pct", c["creak_jitter_pct"])                      # noqa: E731
+    tests = {
+        "creaky": (
+            [(low_pitch(), lambda: phrase("pitch_st", 0, "below")),
+             (high_jit(), lambda: phrase("jitter_pct", 0, "above"))],
+            [(le("hnr_db", c["creak_hnr_db"]), lambda: phrase("hnr_db", 0, "below")),
+             (le("cpp_db", c["creak_cpp_db"]), lambda: phrase("cpp_db", 0, "below")),
+             (low_pitch(), lambda: phrase("pitch_st", 0, "below")),
+             (high_jit(), lambda: phrase("jitter_pct", 0, "above"))],
+            not ge("h1h2_db", c["breathy_h1h2_db"]),          # a strong H1 means breath, not creak
+        ),
+        "breathy": (
+            [(ge("h1h2_db", c["breathy_h1h2_db"]), lambda: phrase("h1h2_db", 0, "above"))],
+            [(le("hnr_db", c["breathy_hnr_db"]), lambda: phrase("hnr_db", 0, "below")),
+             (le("cpp_db", c["breathy_cpp_db"]), lambda: phrase("cpp_db", 0, "below"))],
+            not (low_pitch() and high_jit()),                  # low and irregular is creak
+        ),
+        "strained": (
+            [(le("h1h2_db", c["strained_h1h2_db"]), lambda: phrase("h1h2_db", 0, "below"))],
+            [(ge("pitch_st", c["strained_pitch_st"]), lambda: phrase("pitch_st", 0, "above")),
+             (ge("hnr_db", c["strained_hnr_db"]), lambda: phrase("hnr_db", 0, "above"))],
+            True,
+        ),
+    }
+    for label, (primary, corroborate, allowed) in tests.items():
+        if not allowed or not any(ok for ok, _ in primary):
+            continue
+        support, seen = [], set()
+        for ok, why in primary + corroborate:
+            if ok and (t := why()) not in seen:
+                seen.add(t)
+                support.append(t)
+        if len(support) >= c["min_support"]:
+            return {"label": label, "confirmed": True, "support": support, "deltas": deltas}
+
+    # nothing stands out: clear/modal, but only when the measures really are close to the middle
+    if (near("h1h2_db", c["modal_h1h2_db"]) and near("hnr_db", c["modal_hnr_db"])
+            and (deltas["pitch_st"] is None or near("pitch_st", c["modal_pitch_st"]))):
+        return {"label": "modal", "confirmed": True,
+                "support": ["every voice measure within the clip's middle"], "deltas": deltas}
+    return {"label": None, "confirmed": False,
+            "support": [], "reason": "voice measures mixed", "deltas": deltas}
+
+
 def jitter_shimmer(audio, sr, t, f0, a: float = -1e9, b: float = 1e9, min_periods: int = 12) -> dict:
     """Cycle-to-cycle irregularity over one span, from the pitch contour:
     jitter_pct = mean |T(i) - T(i-1)| / mean T, on runs of consecutive voiced frames;

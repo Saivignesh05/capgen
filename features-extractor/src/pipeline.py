@@ -47,12 +47,17 @@ class Extractor:
         self.space = cfg.get("space")
         self.transcript = cfg.get("transcript")
         self.transcripts = script.load_transcripts(self.transcript)
+        # ASR fills in when no transcript file covers the clip. A file always wins: a human or
+        # gold transcript is better than anything we would recognise.
+        self.asr = models.build(models.TRANSCRIBE, (self.transcript or {}).get("asr"),
+                                ctx, "transcript.asr")
         self.pitch_cfg = cfg.get("pitch", {})
         self.checks = cfg.get("checks", {})
         self.changes = {**CHANGE_DEFAULTS, **(cfg.get("changes") or {})}
         self.models_used = {k: getattr(m, "name", None) for k, m in
                             (("vad", self.vad), ("language", self.language), ("events", self.events),
-                             ("syllables", self.syllables), ("speakers", self.speakers)) if m}
+                             ("syllables", self.syllables), ("speakers", self.speakers),
+                             ("transcript", self.asr)) if m}
 
     # -------------------------------------------------------------- one clip
 
@@ -135,12 +140,21 @@ class Extractor:
         ref_level = _median([p["level_dbfs"] for p in loc["phrases"]])
         for ph in loc["phrases"]:
             ph["arousal"] = dsp.arousal(ph, g.get("pitch"), g["speech"].get("syllables_per_s"), ref_level)
+            # Source axis: how the voice is produced, each phrase against the clip's own middle.
+            # The pitch delta is only offered as evidence when the second tracker confirmed it,
+            # because creak is itself a common cause of pitch-tracking error.
+            if g.get("voice"):
+                ar = ph.get("arousal") or {}
+                st = ar.get("pitch_above_clip_st") if ph.get("pitch_confirmed") else None
+                ph["phonation"] = dsp.phonation(ph.get("voice"), g["voice"], st,
+                                                (self.voice or {}).get("phonation"))
+        g["phonation_shape"] = _phonation_shape(loc["phrases"])
         if self.speakers is not None:
             g["speakers"] = timed("speakers", lambda: self.speakers.detect(clip, phrases))
             if g["speakers"]:
                 for ph, lab in zip(loc["phrases"], g["speakers"]["per_phrase"]):
                     ph["speaker"] = lab
-        if self.transcript is not None:
+        if self.transcript is not None or self.asr is not None:
             loc["words"] = timed("words", lambda: self._words(clip, g, phrases, nuclei))
         loc["changes"] = timed("changes", lambda: self._changes(phrases, pt, f0, f0_check, lt, ldb))
         loc["pauses"] = [{"start": a, "end": b, "ms": round(1000 * (b - a))} for a, b in pauses]
@@ -207,23 +221,43 @@ class Extractor:
         return out
 
     def _words(self, clip, g, phrases, nuclei) -> dict | None:
-        """Words from the transcript (if one is configured for this clip), with syllable counts,
-        times laid over the detected nuclei, and the fillers among them."""
+        """Words from the transcript, with syllable counts, times laid over the detected nuclei,
+        and the fillers among them.
+
+        The text comes from a transcript file when one covers this clip, otherwise from the ASR
+        model. The file wins because a human or gold transcript beats recognition, and `source`
+        records which one was used so a description built on ASR can be told apart.
+
+        Syllables counted from the native script are exact; the envelope detector runs 15-20 %
+        low, so this replaces `global.speech.syllables_per_s` wherever a transcript exists."""
+        lang = (g.get("language") or {}).get("code")
         text = script.text_for(self.transcript, self.transcripts, clip.path)
+        source, asr = "transcript", None
+        if not text and self.asr is not None:
+            asr = self.asr.transcribe(clip, phrases, lang)
+            if asr:
+                text, source = asr["text"], asr["source"]
         if not text:
             return None
-        lang = (g.get("language") or {}).get("code")
         ws = script.words(text, lang)
         if not ws:
             return None
         aligned = script.align_words(ws, nuclei, phrases)
         total = sum(w["syllables"] for w in ws)
         speech_s = g["speech"]["speech_s"]
-        return {"source": "transcript", "method": "syllable_proportional" if aligned else "counts_only",
-                "words": aligned or ws, "syllables": total,
-                "syllables_per_s": total / speech_s if speech_s > 0 else None,
-                "fillers": [w for w in (aligned or ws) if w["filler"]],
-                "drawn_out": script.longest_word(aligned) if aligned else None}
+        out = {"source": source, "method": "syllable_proportional" if aligned else "counts_only",
+               "words": aligned or ws, "syllables": total,
+               "syllables_per_s": total / speech_s if speech_s > 0 else None,
+               "fillers": [w for w in (aligned or ws) if w["filler"]],
+               "drawn_out": script.longest_word(aligned) if aligned else None,
+               "code_switching": script.code_switching(aligned or ws),
+               "repeats": script.repeats(aligned or ws)}
+        if asr:
+            # the recognised text itself, so a reader can check what the counts rest on; it is
+            # never quoted in the description
+            out["text"] = asr["text"]
+            out["asr_passes"] = asr["passes"]
+        return out
 
     def _changes(self, phrases, pt, f0, f0_check, lt, ldb) -> list[dict]:
         """Sustained steps inside phrases (pitch, level); steps closer than merge_s are one event.
@@ -330,6 +364,25 @@ def _tempo(halves, halves_env, ratio: float = 1.3, env_ratio: float = 1.2, solo_
         if max(e1, e2) / min(e1, e2) < env_ratio or ("speeds_up" if e2 > e1 else "slows_down") != d:
             return None
     return d
+
+
+def _phonation_shape(phrases) -> dict | None:
+    """Which phrases stand out from the clip's usual voice production, and which label is the
+    clip's own baseline. No absolute judgement of the voice: only where it changes."""
+    labelled = [(p["n"], (p.get("phonation") or {}).get("label")) for p in phrases]
+    labelled = [(n, lab) for n, lab in labelled if lab]
+    if not labelled:
+        return None
+    counts = {}
+    for _, lab in labelled:
+        counts[lab] = counts.get(lab, 0) + 1
+    baseline = max(counts, key=lambda k: (counts[k], k == "modal"))
+    odd = {}
+    for n, lab in labelled:
+        if lab != baseline:
+            odd.setdefault(lab, []).append(n)
+    return {"baseline": baseline, "counts": counts, "differs": odd or None,
+            "labelled_phrases": len(labelled)}
 
 
 def _coupling(lt, ldb, tilt, at: float, window_s: float = 1.0) -> dict | None:

@@ -30,7 +30,7 @@ features-extractor-results/<DIR name>/
     ├── tool_descriptions.json         [{"audio_path", "tool_description"}, ...] (indented)
     ├── tool_descriptions.rejected.json  clips that failed a rejecting check, and why
     └── run.json                       folder, config + hash, version, device, started/finished, status, counts
-tests/                                 pytest; works next to or inside features-extractor/
+tests/                                 pytest; inside the project (also works beside it)
 ```
 
 `audio_path` is relative to DIR's parent: running on `/data/hi` gives `"hi/clip_001.wav"`.
@@ -130,6 +130,7 @@ type that turns out below 65 %.
    "speech":    {"speech_s", "speech_ratio", "phrases", "pauses", "syllables", "syllables_per_s",
                  "phrase_rhythm": {"period_s", "cv"} | null},
    "voice":     {"hnr_db", "cpp_db", "h1h2_db", "jitter_pct", "shimmer_db", "voiced_pct"},
+   "phonation_shape": {"baseline", "counts", "differs": {label: [phrase n]}, "labelled_phrases"} | null,
    "speakers":  {"count", "per_phrase", "change_times", "threshold", "source"} | null,
    "other_sounds": [{"class", "p"}]        // AST's top AudioSet classes outside speech
  },
@@ -139,7 +140,13 @@ type that turns out below 65 %.
                 "pitch_confirmed", "final_pitch_st", "final_pitch_confirmed",
                 "level_dbfs", "level_vs_others_db", "onset_ms", "offset_ms",
                 "voice": {... as global}, "arousal": {"pitch_above_clip_st", "range_st",
-                "level_above_clip_db", "rate_ratio"}, "speaker"}],
+                "level_above_clip_db", "rate_ratio"},
+                "phonation": {"label", "confirmed", "support", "deltas"} | null, "speaker"}],
+   "words":   {"source", "method", "words": [{"i", "text", "syllables", "filler", "script",
+                "start", "end"}], "syllables", "syllables_per_s", "fillers", "drawn_out",
+               "code_switching": {"latin_words", "ratio", "words", "first_s"} | null,
+               "repeats": [{"i", "text", "start", "end"}],
+               "text", "asr_passes"} | null,     // text/asr_passes only when ASR was used
    "changes": [{"t", "phrase", "pitch_st", "from_hz", "to_hz", "check_st", "confirmed", "reason",
                 "level_db", "level_confirmed", "level_reason", "transient"}],   // only what applies
    "pauses":  [{"start", "end", "ms"}],
@@ -282,7 +289,112 @@ than the other phrases.
 (illustrative numbers)
 
 A line appears only when something is notable (thresholds above), so plain clips stay short.
-No transcript and nothing about voice quality, speakers, room or intent (see the 65 % rule).
+No transcript, no age, gender or dialect, and no reading of mood: those stay with the ALM.
+
+### The 300-word budget
+
+A description is cut at 300 words before grading, and a clause cut in half scores nothing while
+still risking a contradiction, so whole items are dropped instead. Two stages, because the two
+halves of the description fail differently:
+
+* **The clip paragraph** is one stream of clauses, so a **weight floor** rises until it fits half
+  the budget. Every clause carries a weight for how hard its item is to get right (`W` in
+  `describe.py`): `head` and `phonation` 5, `space` and `speakers` 4, `pitch`, `voice_numbers`,
+  `speech` 3, `bandwidth` 2, `channel` and `steady_noise` 1. Sample rate and "no clipping" go
+  first; the room, the voice and the speaker count survive.
+* **The timed lines** are many competing items, so they are **selected**: highest weight first
+  until the words run out, then put back in time order. A line's weight is the hardest item it
+  carries, so a phrase that reports creak outranks a plain one. Two discounts shape the mix —
+  `DIMINISH` (0.75) for each further line of the same kind anywhere in the clip, and `SPREAD`
+  (0.35) for each further line of any kind in the same ~5 s region. Without them a 24 s clip
+  spent its whole budget on twelve pitch jumps from the first four seconds; with them the same
+  clip keeps full-detail phrase lines, a few changes and a few pauses spread across 1–21 s.
+
+A phrase line is weight 4 because one line carries Timing, Pitch, Morphology and Source at once,
+where a change line carries one item. Across the 30-clip set every description now lands at
+282–300 words (median 298) covering a median 76 % of the clip's span, where the unbudgeted text
+ran to 992 words on the longest clip.
+
+### Source axis: how the voice is produced
+
+`dsp.phonation()` labels each phrase **clear/modal, creaky, breathy or strained** — the rubric's
+Source item type. Absolute thresholds for phonation do not transfer across languages,
+microphones or vowels, which is why the raw numbers were never labelled before. A *within-clip*
+contrast does transfer: the same speaker on the same microphone, one phrase against the clip's
+own median, which is also the form the rubric asks for ("creaky voice on the second phrase").
+
+Low HNR and low CPP both mean "less clean harmonics", which creak and breath share, so counting
+votes alone confuses the two. Each label needs a **discriminative primary** signal plus at least
+one corroborating measure:
+
+| Label | Primary (one required) | Corroborating (one required) |
+| --- | --- | --- |
+| creaky | pitch ≤ −3 st below the clip, or jitter ≥ +0.3 points | HNR ≤ −2 dB, CPP ≤ −1.5 dB |
+| breathy | H1–H2 ≥ +3 dB | HNR ≤ −2 dB, CPP ≤ −1.5 dB |
+| strained | H1–H2 ≤ −3 dB | pitch ≥ +3 st, HNR ≥ +1 dB |
+| modal | every measure within the clip's middle (±1.5 st, ±2 dB) | — |
+
+Creak is blocked when H1–H2 is high (that is breath), and breath is blocked when the phrase is
+both low and irregular (that is creak). The phrase's pitch delta is only offered as evidence
+when the second pitch tracker confirmed it, because **creak is itself a common cause of
+pitch-tracking error** — using an unconfirmed contour as evidence for creak would be circular.
+Thresholds live under `voice: phonation:` in `config.yaml`.
+
+Over the 30-clip set this commits on 133 of 230 phrases (90 modal, 19 creaky, 17 breathy,
+7 strained) and withholds the rest with `label: null, confirmed: false`. `global.phonation_shape`
+names the clip's baseline label and which phrases depart from it.
+
+### Transcripts: ASR, and what a transcript unlocks
+
+`transcript.asr` turns on `WhisperTranscribe` (whisper-large-v3, MIT, Hindi and Tamil only).
+A transcript **file always wins**: a human or gold transcript beats recognition, and ASR only
+fills in what no file covers. `local.words.source` records which one was used, so a description
+resting on recognised text can be told from one resting on a gold transcript.
+
+Both the task and the language are forced. Left to detect, Whisper on Indic audio often
+translates to English or romanises instead of transcribing -- which is why published Indic
+benchmarks sometimes cannot score it at all. The language comes from the LID step that already
+ran on the clip, so the two never disagree. Clips over the model's 30 s window are split at
+phrase boundaries, never mid-phrase, and the pieces joined.
+
+What a transcript adds over the envelope detector:
+
+* **Exact syllable counts.** Counted from the script by rule, where the envelope detector runs
+  15-20 % low. `words.syllables_per_s` replaces `speech.syllables_per_s` wherever it exists.
+* **Word timing**, laid over the detected nuclei in proportion to each word's syllables.
+* **Fillers** -- the hesitation sounds listed in `script.FILLERS` per language.
+* **A drawn-out word**, when one word's seconds-per-syllable is >= 1.8x the median.
+* **Code-switching** (`words.code_switching`): English words inside Hindi or Tamil speech.
+  Script alone decides this, so it is as reliable as the transcript -- no model, no judgement.
+  This is the "how India actually talks" case, and it also fixed a real bug: the Devanagari and
+  Tamil syllable rules return **0** for a Latin-script word, so a code-switched clip had its
+  rate dragged down. `script.latin_syllables()` counts vowel groups instead ("WhatsApp" 2,
+  "phone" 1, "battery" 3).
+* **Repeated words** (`words.repeats`): an identical token said twice in a row, the disfluency
+  the Morphology axis asks about. Only an exact repeat counts, so it never guesses at a stutter.
+
+**The description stays in English, and carries only the few words that mean something.** Never
+the native script and never the whole transcript: `script.romanize()` writes a Devanagari or
+Tamil word in plain ASCII (long vowels doubled -- `वणक्कम` is not a word, but `வணக்கம்` ->
+`vanakkam`, `மச்சான்` -> `machchaan`, `घर` -> `ghar`, `मैं` -> `main`, `क्या` -> `kya`). Both
+scripts are abugidas, so this is the same walk `syllables()` makes: a consonant carries an
+inherent "a" unless a vowel sign or the virama / pulli follows, and Hindi drops the word-final
+one. It is a readable identifier, not a scholarly transliteration -- Tamil in particular has no
+single standard, and the generator holds the native-script text anyway.
+
+Four kinds of word reach the description, each with its position so the generator can find it:
+a hesitation sound (`hesitation sound "aa"`), a word drawn out (`the 7th word ("koovappataatha")
+is drawn out`), a word said twice in a row, and the English insertions by name (`1 English word
+mixed into the speech (14% of the words): "WhatsApp"`). `words.roman` is stored on every word in
+the JSON beside its native `text`, so nothing is lost there.
+
+### Intent axis: evidence, not a reading
+
+Addressee, Subtext and Change are the ALM's to commit on, but it cannot commit on what it never
+sees. `arousal` was always computed per phrase and never stated; it is now stated as the
+measurements behind it — which phrase is most and least animated, in semitones above the clip
+median, dB, and multiples of the overall rate. No mood word appears, and an unconfirmed pitch
+contour is not used as evidence.
 
 ## 6. Config, checks, extending
 
@@ -306,7 +418,7 @@ all shards write into the run `job<JOBID>`; `merge --run job<JOBID>` joins them.
 
 ## 8. Tests
 
-`pytest tests` (118 tests, ~3 s, no model files) uses synthetic signals with known answers: tones at
+`pytest tests` (134 tests, ~5 s, no model files) uses synthetic signals with known answers: tones at
 known pitch, noise at an exact SNR, syllable trains at a known rate, phrases at known times, pitch and
 loudness steps, octave jumps, phone-band noise, final falls, tempo changes, abrupt vs gradual onsets,
 mains hum, steady vs fluctuating noise, a convolved reverberant room, laugh-like pulse trains,

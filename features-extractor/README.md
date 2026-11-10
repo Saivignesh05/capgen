@@ -17,8 +17,8 @@ cd features-extractor
 conda env create -f environment.yml          # env "fx", exact versions
 conda activate fx
 python -m src fetch-models                   # frozen models -> models/ (~3 GB, needs internet; re-run adds new ones)
-pytest ../tests                              # model-free tests
-FX_MODELS=1 pytest ../tests                  # + the real models
+pytest tests                                 # model-free tests
+FX_MODELS=1 pytest tests                     # + the real models
 ```
 
 ## Run
@@ -67,7 +67,7 @@ ASR stage's output (a JSON map of audio path to text, or one `<clip>.txt` per cl
 ## Madhava (GPU, no internet)
 
 On the laptop: `conda pack -n fx -o fx.tar.gz`, then
-`rsync -avP fx.tar.gz features-extractor tests <user>@<madhava>:~/`. On Madhava:
+`rsync -avP fx.tar.gz features-extractor <user>@<madhava>:~/` (tests travel with it). On Madhava:
 
 ```bash
 mkdir -p ~/envs/fx && tar -xzf ~/fx.tar.gz -C ~/envs/fx

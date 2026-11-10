@@ -65,7 +65,8 @@ def test_local_phrases_pauses_and_pitch_movement(ex, tmp_path):
     assert pause["ms"] == pytest.approx(800, abs=150)
     assert {"n", "start", "end", "syllables", "syllables_per_s", "rate_first_half", "rate_second_half",
             "rate_change", "pitch", "pitch_confirmed", "final_pitch_st", "final_pitch_confirmed",
-            "level_dbfs", "level_vs_others_db", "onset_ms", "offset_ms", "voice", "arousal"} == set(p1)
+            "level_dbfs", "level_vs_others_db", "onset_ms", "offset_ms", "voice", "arousal",
+            "phonation"} == set(p1)
     assert p1["pitch_confirmed"] and p2["pitch_confirmed"]     # clean synthetic tones: trackers agree
 
 
@@ -160,6 +161,88 @@ def test_unconfirmed_pitch_jumps_are_not_stated(ex, tmp_path):
     ch = extract(ex, tmp_path, x)["local"]["changes"]
     assert any(not c.get("confirmed", True) for c in ch)
     assert "jumps up 12" not in describe(extract(ex, tmp_path, x))
+
+
+def test_phonation_is_relative_to_the_clip(ex, tmp_path):
+    """The Source axis: a label needs two independent measures pointing the same way, and it
+    is always a within-clip contrast, never an absolute judgement of the voice."""
+    from src import dsp
+    clip = {"hnr_db": 12.0, "cpp_db": 14.0, "h1h2_db": 2.0, "jitter_pct": 0.8}
+
+    # creak: well below the clip in pitch, jitter up, HNR down -> three supports
+    creak = dsp.phonation({"hnr_db": 8.0, "cpp_db": 11.0, "h1h2_db": 1.0, "jitter_pct": 1.4},
+                          clip, pitch_st=-5.0)
+    assert creak["label"] == "creaky" and creak["confirmed"] and len(creak["support"]) >= 2
+
+    # breath: first harmonic much stronger, harmonics weaker
+    breathy = dsp.phonation({"hnr_db": 9.0, "cpp_db": 12.0, "h1h2_db": 7.0, "jitter_pct": 0.9},
+                            clip, pitch_st=0.5)
+    assert breathy["label"] == "breathy" and breathy["confirmed"]
+
+    # press: pitch up, first harmonic squeezed, harmonics strong
+    strained = dsp.phonation({"hnr_db": 14.0, "cpp_db": 15.0, "h1h2_db": -2.0, "jitter_pct": 0.8},
+                             clip, pitch_st=5.0)
+    assert strained["label"] == "strained" and strained["confirmed"]
+
+    # everything near the middle -> modal, which is still a scoring item
+    assert dsp.phonation({"hnr_db": 12.3, "cpp_db": 14.1, "h1h2_db": 2.4, "jitter_pct": 0.85},
+                         clip, pitch_st=0.2)["label"] == "modal"
+
+    # one measure alone is never enough
+    one = dsp.phonation({"hnr_db": 12.0, "cpp_db": 14.0, "h1h2_db": 7.0, "jitter_pct": 0.8},
+                        clip, pitch_st=0.0)
+    assert one["label"] is None and not one["confirmed"]
+
+    # too little measured at all
+    assert dsp.phonation({"hnr_db": 8.0}, {"cpp_db": 14.0}, None) is None
+    assert dsp.phonation(None, clip, -5.0) is None
+
+
+def test_phonation_shape_and_intent_evidence(ex, tmp_path):
+    from src.describe import arousal_shape_text, phonation_text
+    f = extract(ex, tmp_path)
+    g = f["global"]
+    assert "phonation" in f["local"]["phrases"][0]
+    if g.get("phonation_shape"):
+        t = phonation_text(g)
+        assert "judged against this clip's own middle" in t
+
+    # intent evidence names the most and least animated phrase, as numbers not a mood
+    fake = {"local": {"phrases": [
+        {"n": 1, "pitch_confirmed": True,
+         "arousal": {"pitch_above_clip_st": 4.0, "level_above_clip_db": 6.0, "rate_ratio": 1.4}},
+        {"n": 2, "pitch_confirmed": True,
+         "arousal": {"pitch_above_clip_st": -3.0, "level_above_clip_db": -4.0, "rate_ratio": 0.8}}]}}
+    t = arousal_shape_text(fake)
+    assert "phrase 1 is the most animated" in t and "phrase 2 the least" in t
+    assert "4 semitones above" in t and "6 dB louder" in t and "1.40x" in t
+    for mood in ("angry", "excited", "sad", "happy"):
+        assert mood not in t                                  # the reading is the ALM's
+    # an unconfirmed pitch contour is not used as intent evidence
+    fake["local"]["phrases"][0]["pitch_confirmed"] = False
+    assert "semitones above" not in (arousal_shape_text(fake) or "")
+
+
+def test_word_budget_drops_cheap_items_first(ex, tmp_path):
+    """Rime cuts at 300 words. We raise a weight floor instead, so whole clauses go and the
+    expensive ones survive."""
+    from src.describe import W, describe, global_text, words
+    f = extract(ex, tmp_path)
+    full = describe(f)
+    assert words(full) <= 300
+
+    # the floor is monotone: raising it never makes the text longer
+    lengths = [words(global_text(f, floor)) for floor in (0, 1, 2, 3, 4, 5)]
+    assert lengths == sorted(lengths, reverse=True), lengths
+
+    # cheap channel chatter goes before the expensive items
+    assert "no clipping" in global_text(f, 0)
+    assert "no clipping" not in global_text(f, 2)
+    assert W["event"] > W["pause"] and W["phrase_phonation"] > W["phrase_level"]
+
+    # a hard limit is honoured even when every floor is still too long
+    tight = describe(f, word_limit=25)
+    assert words(tight) <= words(full)
 
 
 def test_unconfirmed_phrase_pitch_is_not_stated(ex, tmp_path):
@@ -361,10 +444,13 @@ def test_added_fields_and_no_false_tempo_claims(ex, tmp_path):
     assert ph["rate_first_half"] == pytest.approx(ph["rate_second_half"], rel=0.1)    # steady 4 syl/s
     text = describe(f)
     assert "speeds up" not in text and "slows down" not in text and "mains hum" not in text
-    for gone in ("phonation", "breathy", "pressed", "creak", "whisper", "brighter", "darker",
-                 "breath", "click"):
-        assert gone not in text, gone                               # labels stay with the ALM
-    assert "Voice measurements (numbers only, not a judgement of voice quality):" in text
+    # what we cannot ground stays with the ALM: age, gender, dialect, mood, absolute voice labels
+    for gone in ("whisper", "brighter", "darker", "click", "years old", "sounds angry"):
+        assert gone not in text, gone
+    assert "Voice measurements (numbers only, measured against this clip, not published norms):" in text
+    # the Source axis IS stated now, but a label is always framed as within-clip
+    if "Voice production is mostly" in text:
+        assert "judged against this clip's own middle" in text
 
 
 def test_hum_end_to_end(ex, tmp_path):
@@ -466,12 +552,131 @@ def test_transcript_gives_syllable_counts_fillers_and_drawn_out_words(tmp_path, 
     assert w["syllables_per_s"] == pytest.approx(11 / f["global"]["speech"]["speech_s"], rel=1e-3)   # JSON rounds
     assert [x["text"] for x in w["fillers"]] == ["ஆ"]
     out = describe(f)
-    assert "11 syllables in the transcript" in out and 'hesitation sound "ஆ"' in out
+    assert "11 syllables in the transcript" in out
+    assert 'hesitation sound "aa"' in out                        # romanised, not "ஆ"
+    for native in ("ஆ", "மச்சான்", "கோவப்படாத", "இங்கே"):        # never the native script
+        assert native not in out, native
 
 
 def test_no_transcript_configured_means_no_words(ex, tmp_path):
     f = extract(ex, tmp_path)
     assert "words" not in f["local"] and "syllables in the transcript" not in describe(f)
+
+
+class FakeASR:
+    """Stands in for WhisperTranscribe so the ASR wiring is tested without a 3 GB download."""
+    name = "fake-asr"
+
+    def __init__(self, text="மச்சான் இங்கே பார்", languages=("hi", "ta")):
+        self.text, self.languages, self.calls = text, languages, []
+
+    def transcribe(self, clip, phrases, language):
+        self.calls.append(language)
+        if language not in self.languages or not phrases:
+            return None
+        return {"text": self.text, "source": f"asr:{self.name}", "passes": 1}
+
+
+def test_asr_fills_in_when_no_transcript_file(tmp_path, monkeypatch):
+    """2 + 2 + 1 = 5 syllables counted from the Tamil script, exactly as a file would be."""
+    from src.pipeline import Extractor as E
+    ex = E(config(transcript={}))
+    ex.asr = FakeASR()
+    monkeypatch.setattr(ex.syllables, "nuclei", lambda clip: np.linspace(0.6, 4.4, 5))
+    f = extract(ex, tmp_path)
+    w = f["local"]["words"]
+    assert w["source"] == "asr:fake-asr" and w["syllables"] == 5
+    assert w["text"] == "மச்சான் இங்கே பார்" and w["asr_passes"] == 1
+    assert ex.asr.calls == ["ta"]                        # the language comes from the LID step
+    out = describe(f)
+    assert "5 syllables in the transcript" in out
+    for word in w["text"].split():                       # the words themselves are never quoted
+        assert word not in out
+
+
+def test_transcript_file_beats_asr(tmp_path, monkeypatch):
+    """A human or gold transcript wins; the ASR model is not even called."""
+    from src.pipeline import Extractor as E
+    (tmp_path / "tr.json").write_text(json.dumps({"ta/a.wav": "ஆ மச்சான்"}), encoding="utf-8")
+    ex = E(config(transcript={"file": str(tmp_path / "tr.json")}))
+    ex.asr = FakeASR(text="totally different")
+    monkeypatch.setattr(ex.syllables, "nuclei", lambda clip: np.linspace(0.6, 4.4, 3))
+    w = extract(ex, tmp_path)["local"]["words"]
+    assert w["source"] == "transcript" and w["syllables"] == 3 and "text" not in w
+    assert ex.asr.calls == []
+
+
+def test_asr_only_for_hindi_and_tamil(tmp_path, monkeypatch):
+    from src.pipeline import Extractor as E
+    ex = E(config(transcript={}))
+    ex.asr = FakeASR(languages=("hi",))                  # this stub refuses Tamil
+    monkeypatch.setattr(ex.syllables, "nuclei", lambda clip: np.linspace(0.6, 4.4, 5))
+    f = extract(ex, tmp_path)
+    assert f["local"].get("words") is None               # nothing invented when ASR declines
+    assert "syllables in the transcript" not in describe(f)
+
+
+def test_asr_appears_in_models_used(tmp_path):
+    from src.pipeline import Extractor as E
+    ex = E(config(transcript={}))
+    ex.asr = FakeASR()
+    ex.models_used["transcript"] = ex.asr.name          # as build() would have recorded it
+    assert extract(ex, tmp_path)["run"]["models"]["transcript"] == "fake-asr"
+
+
+def test_code_switching_and_repeats_from_the_transcript(tmp_path, monkeypatch):
+    """Hinglish/Tanglish is the point of "how India actually talks", and script alone decides
+    it, so it is as reliable as the transcript. A Latin word must also count syllables -- the
+    Devanagari rule returns 0 for it, which would drag the whole rate down."""
+    from src import script
+    from src.pipeline import Extractor as E
+    # 1 + 2 + 1 + 1 + 1 + 3 = 9 syllables, "पे" twice in a row, one English word
+    text = "मैं WhatsApp पे पे बात करूंगा"
+    (tmp_path / "tr.json").write_text(json.dumps({"ta/a.wav": text}), encoding="utf-8")
+    cfg = config(transcript={"file": str(tmp_path / "tr.json")},
+                 language={"impl": "folder", "allowed": ["hi", "ta"], "min_confidence": 0.0})
+    ex = E(cfg)
+    monkeypatch.setattr(ex.syllables, "nuclei", lambda clip: np.linspace(0.6, 4.4, 9))
+    w = extract(ex, tmp_path)["local"]["words"]
+
+    assert w["syllables"] == 9, [(x["text"], x["syllables"]) for x in w["words"]]
+    cs = w["code_switching"]
+    assert cs["latin_words"] == 1 and cs["words"] == ["WhatsApp"]
+    assert cs["ratio"] == pytest.approx(1 / 6, rel=1e-3)          # JSON rounds
+    assert [r["text"] for r in w["repeats"]] == ["पे"]
+
+    out = describe(extract(ex, tmp_path))
+    assert '1 English word mixed into the speech (17% of the words): "WhatsApp".' in out
+    # transcript words appear ROMANISED, never in the native script, and only the few that
+    # carry something: a hesitation, a word drawn out, a word repeated, an English insertion
+    assert 'the 3rd word ("pe") is said twice in a row' in out
+    for native in ("करूंगा", "बात", "पे", "मैं"):
+        assert native not in out, native
+
+    # the syllable bug this guards: a Latin word scored 0 before
+    assert script.words("WhatsApp", "hi")[0]["syllables"] == 2
+    assert script.code_switching(script.words("மச்சான் இங்கே", "ta")) is None      # no English
+    assert script.repeats([{"text": "ஆ", "filler": True}, {"text": "ஆ", "filler": True}]) == []
+
+
+def test_whisper_transcribe_groups_long_clips_at_phrase_boundaries():
+    """Grouping is pure bookkeeping, so check it without running the decoder: phrases are
+    packed into <= window_s groups and never split mid-phrase."""
+    from src import models
+    calls = []
+
+    class Spy(models.WhisperTranscribe):
+        def __init__(self):                              # skip loading the checkpoint
+            self.window_s, self.name = 10.0, "spy"
+        def _pass(self, x, sr, language):
+            calls.append(len(x) / sr)
+            return "word"
+
+    clip = type("C", (), {"sr": SR, "audio": np.zeros(int(25 * SR), np.float32)})()
+    phrases = [(0.0, 4.0), (5.0, 9.0), (11.0, 15.0), (16.0, 24.0)]
+    out = Spy().transcribe(clip, phrases, "ta")
+    assert out["passes"] == len(calls) >= 2
+    assert all(d <= 10.0 + 1e-6 for d in calls), calls
 
 
 def test_tempo_needs_both_detectors_to_agree():

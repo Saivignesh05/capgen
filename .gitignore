@@ -263,11 +263,6 @@ generator/models/indic-parler-tts/README.md
 generator/models/description-tokenizer/models--*/
 generator/models/description-tokenizer/.locks/
 
-# Generated audio outputs
-generator/outputs/
-
-# Logs
-generator/logs/
 
 # Hugging Face credentials (defensive)
 generator/.huggingface/

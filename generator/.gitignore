@@ -1,0 +1,134 @@
+# ==============================================================
+# Python
+# ==============================================================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# pyenv
+.python-version
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ==============================================================
+# Model weights and large binary files
+# (DO NOT commit – weights are ~3.75 GB+)
+# Run:  python scripts/download_model.py
+# ==============================================================
+
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# ==============================================================
+# Hugging Face model files (downloaded by download_model.py)
+# ==============================================================
+
+models/indic-parler-tts/model.safetensors
+models/indic-parler-tts/tokenizer.json
+models/indic-parler-tts/tokenizer.model
+models/indic-parler-tts/tokenizer_config.json
+models/indic-parler-tts/special_tokens_map.json
+models/indic-parler-tts/preprocessor_config.json
+models/indic-parler-tts/generation_config.json
+models/indic-parler-tts/.gitattributes
+models/indic-parler-tts/.cache/
+models/indic-parler-tts/README.md
+
+# Description tokenizer Hugging Face cache
+models/description-tokenizer/models--*/
+models/description-tokenizer/.locks/
+
+# Global HF cache (defensive)
+.cache/huggingface/
+
+# ==============================================================
+# Hugging Face authentication
+# ==============================================================
+
+.huggingface/
+token
+hf_token*
+*.token
+.netrc
+
+# ==============================================================
+# Generated audio outputs
+# ==============================================================
+
+outputs/
+
+# ==============================================================
+# Logs
+# ==============================================================
+
+logs/
+*.log
+
+# ==============================================================
+# macOS
+# ==============================================================
+
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# ==============================================================
+# IDE and editors
+# ==============================================================
+
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ==============================================================
+# Temporary files
+# ==============================================================
+
+*.tmp
+*.bak
+*.orig
+tmp/
+temp/

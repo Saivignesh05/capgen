@@ -1,0 +1,63 @@
+# ==============================================================
+# Indic-Parler-TTS Generator
+# Python 3.10 required
+# ==============================================================
+#
+# PyTorch must be installed separately before the rest of the
+# dependencies, because the correct wheel depends on your hardware:
+#
+#   CPU (any platform):
+#     pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+#
+#   Apple Silicon (MPS) – default macOS wheel includes MPS support:
+#     pip install torch torchaudio
+#
+#   NVIDIA CUDA 12.x:
+#     pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
+#
+# After installing PyTorch, install the remaining dependencies:
+#     pip install -r requirements.txt
+#
+# ==============================================================
+# Dependency conflict note
+# ==============================================================
+#
+# descript-audiotools 0.7.4 (a transitive dependency pulled in by
+# parler-tts via descript-audio-codec) declares protobuf<5.0.0 in
+# its package metadata. However, descript-audiotools does NOT
+# import protobuf at runtime – the constraint is a stale artefact
+# from an older version of that library that used gRPC. pip will
+# print a conflict warning but the package works correctly with
+# protobuf 5.x.
+#
+# sentencepiece==0.2.1 is required. Version 0.2.3 triggers a
+# "gencode version does not match runtime version" error because
+# it bundles protobuf generated code that is incompatible with
+# the protobuf 5.x runtime.
+#
+# ==============================================================
+
+# parler-tts – pinned to the exact commit that was tested.
+# parler_tts 0.2.2 hard-pins transformers>=4.46.1,<=4.46.1.
+git+https://github.com/huggingface/parler-tts.git@d108732cd57788ec86bc857d99a6cabd66663d68
+
+# transformers – version pinned by parler-tts; do not change
+transformers==4.46.1
+
+# inference acceleration
+accelerate>=0.26.0
+
+# numpy – keep below 2.0 for compatibility with this torch version
+numpy<2
+
+# audio I/O
+soundfile>=0.12.0
+
+# Hugging Face utilities (model download, caching)
+huggingface_hub>=0.26.0
+safetensors>=0.4.0
+
+# tokeniser dependencies
+# sentencepiece 0.2.1 avoids the gencode/runtime mismatch (see above)
+sentencepiece==0.2.1
+protobuf>=5.27.0,<6

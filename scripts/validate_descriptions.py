@@ -206,17 +206,24 @@ def check_unique_ids(path: Path, header: List[str], data) -> List[Violation]:
     return violations
 
 
-def check_native_script(path: Path, header: List[str], data) -> List[Violation]:
-    condition = "text contains Tamil script"
+NATIVE_SCRIPT_RANGES = {
+    "ta": ("Tamil", "\u0b80", "\u0bff"),
+    "hi": ("Devanagari", "\u0900", "\u097f"),
+}
+
+
+def check_native_script(path: Path, header: List[str], data, expected: str) -> List[Violation]:
+    script_name, lo, hi = NATIVE_SCRIPT_RANGES[expected]
+    condition = f"text contains {script_name} script"
     violations = []
 
     for line_no, row in data:
         text = value(header, row, "text") or ""
-        if not any("\u0b80" <= char <= "\u0bff" for char in text):
+        if not any(lo <= char <= hi for char in text):
             violations.append(Violation(
                 condition,
                 row_location(path, header, line_no, row),
-                "text has no Tamil characters."
+                f"text has no {script_name} characters."
             ))
 
     return violations
@@ -293,10 +300,11 @@ def validate_file(path: Path) -> List[Violation]:
             ("description_id values are unique", check_unique_ids(path, header, data)),
         ]
 
-        if expected_language == "ta":
+        if expected_language in NATIVE_SCRIPT_RANGES:
+            script_name = NATIVE_SCRIPT_RANGES[expected_language][0]
             extra_checks.append((
-                "text contains Tamil script",
-                check_native_script(path, header, data)
+                f"text contains {script_name} script",
+                check_native_script(path, header, data, expected_language)
             ))
 
         for condition, violations in extra_checks:

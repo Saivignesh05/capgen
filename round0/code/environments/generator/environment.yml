@@ -1,0 +1,8 @@
+# Conda part of the "generator" environment: the generator and its tests. Python packages are in
+# requirements.txt next to this file; scripts/setup_envs.sh installs torch first, then those.
+# Python 3.10 is the version this setup was verified with.
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip

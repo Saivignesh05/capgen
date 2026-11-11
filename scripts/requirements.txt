@@ -1,0 +1,14 @@
+asarPy==1.0.1
+cffi==2.1.1
+Cython==3.3.0
+Mako==1.4.3.dev0
+Markdown==3.11.2
+MarkupSafe==3.0.4
+meson==1.9.2
+numpy==2.5.4
+packaging==26.3
+pycparser==3.12
+setuptools==80.10.2
+soundfile==0.14.0
+typing_extensions==4.16.0
+wheel==0.48.0

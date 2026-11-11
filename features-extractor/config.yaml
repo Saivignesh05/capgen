@@ -1,0 +1,111 @@
+# Hindi / Tamil feature extraction. One file; every model is frozen (models/models.lock.json).
+
+sample_rate: 16000        # analysis rate; audio is converted to 16 kHz mono
+device: auto              # auto = cuda if a GPU is visible, else cpu (Whisper + AST; VAD/DSP run on CPU)
+models_dir: models        # relative to this file
+verify_models: true       # re-hash model files against the lock at start-up
+
+vad:
+  impl: silero            # silero | energy (no model)
+  # threads: 1            # torch threads for the whole process; leave unset to use every core
+  threshold: 0.50
+  neg_threshold: 0.35
+  min_speech_s: 0.15
+  min_silence_s: 0.20     # phrases closer than this are joined
+  pad_s: 0.05
+
+language:
+  impl: whisper           # whisper (whisper-small language head) | folder (hi/ ta/ in the path)
+  allowed: [hi, ta]       # only these are scored
+  min_confidence: 0.60    # below -> "und"
+
+syllables:
+  impl: phonemes          # phonemes (wav2vec2 XLSR-53 phoneme recogniser: each vowel = a syllable) | envelope (no model)
+
+pitch:
+  method: pyin            # pyin (librosa) | autocorr (numpy, faster, less robust)
+  fmin_hz: 70
+  fmax_hz: 450
+
+events:                   # delete this section to skip sound events
+  impl: ast
+  window_s: 0.96
+  hop_s: 0.48
+  batch_size: 32
+  min_event_s: 0.20
+  merge_gap_s: 0.25
+  gate: 0.5               # windowed pass only for 10 s chunks where a label reaches gate x threshold
+                          # (raise towards 0.9 to skip it more often: much faster on CPU, misses quiet events)
+  labels:                 # label: AudioSet class names (substring match) + threshold (set for AST)
+    laughter:          {threshold: 0.40, classes: [Laughter, Baby laughter, Giggle, Snicker, "Chuckle, chortle"]}
+    cough:             {threshold: 0.40, classes: [Cough, Throat clearing]}
+    sigh:              {threshold: 0.40, classes: [Sigh]}
+    breathing:         {threshold: 0.50, classes: [Breathing, Wheeze, Snort, Gasp, Pant]}
+    crying:            {threshold: 0.40, classes: ["Crying, sobbing", "Baby cry, infant cry", Whimper]}
+    music:             {threshold: 0.50, classes: [Music, Singing, Musical instrument]}
+    animal:            {threshold: 0.40, classes: [Animal, "Domestic animals, pets", Dog, Bark, Cat, Bird]}
+    impact:            {threshold: 0.45, classes: [Knock, Door, Tap, Bang, "Slap, smack", Clatter, Slam, Crash]}
+
+changes:                  # sustained pitch / loudness steps inside a phrase; stricter = fewer, safer items
+  pitch_st: 6.0           # median pitch of the 150 ms before vs after differs by >= 6 semitones
+  max_pitch_per_phrase: 3 # only the largest pitch steps of each phrase
+  pitch_window_s: 0.15
+  level_db: 6.0           # syllable-peak level (80th percentile) of 300 ms before vs after
+  level_window_s: 0.30
+  min_separation_s: 0.30
+  merge_s: 0.15           # steps closer than this are one event
+  transient_s: 0.6        # a loudness step with an opposite one this close is a burst, not a change
+
+voice:
+  # Source axis: phonation per phrase, judged against THIS clip's own median (never against
+  # published norms, which do not transfer across languages, microphones or vowels).
+  # A label needs one discriminative primary signal plus one corroborating measure.
+  phonation:
+    creak_pitch_st: -3.0        # primary: phrase sits this far below the clip median
+    creak_jitter_pct: 0.3       # primary: pulses this much more irregular
+    creak_hnr_db: -2.0          # corroborating
+    creak_cpp_db: -1.5
+    breathy_h1h2_db: 3.0        # primary: first harmonic this much stronger
+    breathy_hnr_db: -2.0
+    breathy_cpp_db: -1.5
+    strained_h1h2_db: -3.0      # primary: first harmonic this much weaker (pressed)
+    strained_pitch_st: 3.0
+    strained_hnr_db: 1.0
+    modal_pitch_st: 1.5         # "clear/modal": everything this close to the clip's middle
+    modal_h1h2_db: 2.0
+    modal_hnr_db: 2.0
+    min_support: 2                 # HNR / CPP / H1-H2 / jitter / shimmer per clip and phrase: numbers for the
+                          # audio-language model, never labels. Delete this line to skip them.
+
+space: {}                 # reverberation: dry / some reverberation / reverberant, from how fast the
+                          # level falls after phrases. Only stated when not dry. Delete to skip.
+
+speakers:                 # how many voices and where the voice changes (never who they are)
+  impl: wavlm             # WavLM-base-plus-sv x-vectors per phrase, clustered
+  threshold: 0.5          # phrases merge at this cosine similarity; voices still apart = clearly different
+  same_threshold: 0.8     # "one voice throughout" only when every pair is at least this similar
+  min_phrase_s: 1.0       # shorter phrases follow the nearest speaker instead of making a new one
+  min_embed_s: 0.5        # a shorter phrase is widened into the surrounding audio (WavLM's head needs ~0.3 s)
+
+transcript:               # words, syllable counts and fillers. Hindi and Tamil only.
+                          # A transcript FILE always wins over ASR: a human or gold transcript
+                          # beats recognition. Delete the whole section to skip word measures.
+  # file: ../transcripts/ta.json    # {"ta/clips/x.wav": "text"} or [{"audio_path", "text"}, ...]
+  # dir: ../transcripts             # or one <clip stem>.txt per clip
+  asr:                    # uncomment to transcribe whatever no file covers
+    impl: whisper
+    model: whisper-large-v3   # or whisper-small to reuse the LID checkpoint (much worse on Indic)
+    beams: 1                  # 2-5 is slower and a little more accurate
+    window_s: 30.0            # longer clips are split at phrase boundaries, never mid-phrase
+    max_new_tokens: 440
+
+checks:                   # a failing check is recorded in the clip's JSON
+  min_duration_s: 0.25
+  max_duration_s: 30.0
+  min_sample_rate: 16000
+  max_clipping_pct: 1.0
+  max_silence_pct: 80.0
+  min_speech_s: 0.5
+  min_snr_db: 10.0
+  language: [hi, ta]
+  reject: [min_duration_s, min_speech_s, language]   # these also keep the clip out of tool_descriptions.json

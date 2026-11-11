@@ -1,0 +1,52 @@
+# Python packages for the "generator" environment.
+#
+# Taken from the generator setup that was verified working (Python 3.10). Only pydantic, pyyaml
+# and pytest are added, for the settings, the shared types and the tests.
+#
+# torch and torchaudio are NOT listed: scripts/setup_envs.sh installs them first, from the
+# PyTorch index for the CUDA version the cluster supports.
+#
+# ==============================================================
+# Dependency conflict note
+# ==============================================================
+#
+# descript-audiotools 0.7.4 (a transitive dependency pulled in by parler-tts via
+# descript-audio-codec) declares protobuf<5.0.0 in its package metadata. It does NOT import
+# protobuf at runtime: the constraint is a stale artefact from an older version that used gRPC.
+# pip prints a conflict warning, but the package works correctly with protobuf 5.x.
+#
+# sentencepiece==0.2.1 is required. Version 0.2.3 triggers a "gencode version does not match
+# runtime version" error, because it bundles protobuf generated code that is incompatible with
+# the protobuf 5.x runtime.
+#
+# Exact versions of everything installed are recorded in requirements.lock.txt after building.
+# ==============================================================
+
+# parler-tts, pinned to the exact commit that was tested.
+# parler_tts 0.2.2 hard-pins transformers>=4.46.1,<=4.46.1.
+git+https://github.com/huggingface/parler-tts.git@d108732cd57788ec86bc857d99a6cabd66663d68
+
+# transformers: version pinned by parler-tts; do not change
+transformers==4.46.1
+
+# inference acceleration
+accelerate>=0.26.0
+
+# numpy: keep below 2.0 for compatibility with the verified torch version
+numpy<2
+
+# audio I/O
+soundfile>=0.12.0
+
+# Hugging Face utilities
+huggingface_hub>=0.26.0
+safetensors>=0.4.0
+
+# tokeniser dependencies: sentencepiece 0.2.1 avoids the gencode/runtime mismatch (see above)
+sentencepiece==0.2.1
+protobuf>=5.27.0,<6
+
+# added for this project: settings, shared types and tests
+pydantic>=2
+pyyaml
+pytest

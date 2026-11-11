@@ -1,0 +1,22 @@
+# Python packages for the "asr-captioner" environment.
+#
+# torch is NOT listed: scripts/setup_envs.sh installs it first, from the PyTorch index for the
+# CUDA version the cluster supports.
+#
+# Qwen3-Omni was added in transformers 4.57.0, and the code passes `dtype=` (4.56 or newer).
+# The generator cannot share this environment: see environments/generator/requirements.txt.
+#
+# The ASR's own requirements (requirements.txt inside its model folder) are added by
+# scripts/setup_envs.sh, with the versions here kept fixed.
+#
+# Exact versions of everything installed are recorded in requirements.lock.txt after building.
+
+transformers==4.57.6
+accelerate              # needed for device_map="auto"
+huggingface_hub
+pydantic>=2
+pyyaml
+numpy
+librosa
+soundfile
+pytest

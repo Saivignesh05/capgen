@@ -1,6 +1,0 @@
-{
-    "captioner": "some_hash_value",
-    "generator": "some_other_hash_value",
-    "asr": "some_asr_hash_value",
-    "lid": "some_lid_hash_value"
-}

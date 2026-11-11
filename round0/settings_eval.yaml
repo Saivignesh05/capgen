@@ -1,0 +1,43 @@
+# Round 0 settings for the evaluation outputs. Identical to settings.yaml except for
+# generation.samples_per_item (a test checks this).
+# Every value here is used; nothing in the code has a default.
+# Checked by code/pipeline/settings.py: unknown or misspelled keys are errors.
+
+# Folder that holds every model, each in model_dir/<repo_id>. Must exist. Set this first.
+model_dir: ../models
+
+# Hugging Face repos, each pinned to an exact commit.
+downloads:
+  captioner:
+    repo_id: Qwen/Qwen3-Omni-30B-A3B-Captioner
+    revision: a2bd106cbf527db5676e79662674da22b0545ec0
+    allow_patterns: null      # every file
+  asr:
+    repo_id: bodhan-ai/indic-transcribe-core
+    revision: e083ab7dfeeddcb5c0b4a2d7df53f53e7b0f1537
+    allow_patterns: null
+  generator:
+    repo_id: ai4bharat/indic-parler-tts
+    revision: 660bc53c64ae83150613264111708a0465211237
+    allow_patterns: null
+  description_tokenizer:      # the generator's description tokenizer; tokenizer files only
+    repo_id: google/flan-t5-large
+    revision: 0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a
+    allow_patterns: [config.json, tokenizer.json, tokenizer_config.json, special_tokens_map.json, spiece.model]
+
+captioner:
+  dtype: bfloat16
+  attn_implementation: sdpa
+  max_new_tokens: 1024
+  max_clip_seconds: 30.0
+
+asr:
+  max_clip_seconds: 30.0
+
+generator:
+  device: cuda
+
+# How the runner (scripts/run.py) uses the generator.
+generation:
+  samples_per_item: 10        # the competition asks for 10 per evaluation description
+  seed: 0

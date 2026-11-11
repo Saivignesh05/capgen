@@ -1,0 +1,8 @@
+# Conda part of the "asr-captioner" environment: the captioner, the ASR, scripts/download.py and
+# most tests. Python packages are in requirements.txt next to this file; scripts/setup_envs.sh
+# installs torch first, then those.
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip

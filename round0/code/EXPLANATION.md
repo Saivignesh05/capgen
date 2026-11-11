@@ -33,7 +33,7 @@ round0/
     │       └── generate.py     stage 3 (generator): speak each transcript several times
     ├── environments/
     │   ├── asr-captioner/      environment.yml, requirements.txt, requirements.lock.txt
-    │   └── generator/          environment.yml, requirements.txt, requirements.lock.txt
+    │   └── generator/          environment.yml, requirements.txt, requirements-overrides.txt, requirements.lock.txt
     └── tests/
         ├── helpers.py, conftest.py
         ├── unit/               no models needed
@@ -142,6 +142,7 @@ So there are two conda environments, each defined in its own folder under `envir
 - `environment.yml`: the conda part, Python 3.10 and pip.
 - `requirements.txt`: what the environment needs, fixing only the versions that must be fixed. The generator's file comes from the verified generator setup, with its fixes for `protobuf` and `sentencepiece`.
 - `requirements.lock.txt`: written by the first build with the exact version of every package. Every later build installs from it instead, so everyone gets the same environment.
+- `requirements-overrides.txt` (generator only): `protobuf` and `sentencepiece` versions that contradict a dependency declared by `descript-audiotools` but work at runtime. pip refuses to install them in the same command as everything else, so they are installed in a second command, where pip only warns.
 
 `torch` is in neither `requirements.txt`: the first build installs it first, from the PyTorch index you give, because the right CUDA build depends on the GPU driver. The ASR's own requirements come from its model folder and are installed with the fixed versions as constraints, so if it ever needs something different, the build stops instead of silently breaking the captioner.
 

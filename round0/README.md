@@ -156,12 +156,19 @@ It finishes with:
 
 | Error mentions | What to do |
 |---|---|
-| `Read timed out`, `connection broken` | Your network is slow or blocks conda. Run the command again, or try another network. |
+| `Read timed out`, `connection broken`, `Retrying in 2s` | Your network is slow. A few retries are normal; if the script stops, run the same command again: downloaded files are kept and half-finished ones continue. If it keeps failing, try another network. |
 | `401`, `403`, `gated`, `access` | You have not accepted the terms of one of the two gated models (see "Before you start"), or logged in with the wrong account. |
 | `No such directory` | `model_dir` in the settings is wrong. Redo Step 3. |
 | `ResolutionImpossible`, `conflict` | A package version clash. Do not change version numbers; send us the full message. |
 
-While the generator environment builds, pip prints a warning that `descript-audiotools` requires `protobuf<5`. **This is expected and harmless.**
+While the generator environment builds, pip prints this, starting with the word `ERROR`:
+
+```
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. ...
+descript-audiotools 0.7.4 requires protobuf<5.0.0, but you have protobuf 5.29.6 which is incompatible.
+```
+
+**This is expected and harmless**, and the script carries on. (One package declares an outdated limit on `protobuf` that it does not actually need; `code/environments/generator/requirements-overrides.txt` explains.)
 
 ## Step 5: Check that you have exactly our model files
 

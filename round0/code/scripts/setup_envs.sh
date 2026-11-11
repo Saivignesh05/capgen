@@ -43,11 +43,16 @@ build_env() {   # build_env <environment>: create from environments/<environment
     fi
     if [ -f "$(lock_file "$name")" ]; then        # CAREFUL E5
         echo "== Installing the exact versions in $(lock_file "$name")"
-        in_env "$name" pip install -r "$(lock_file "$name")" --extra-index-url "$TORCH_INDEX_URL"
+        in_env "$name" pip install --no-deps -r "$(lock_file "$name")" --extra-index-url "$TORCH_INDEX_URL"
     else
         echo "== No lock file yet: installing from requirements.txt"
         in_env "$name" pip install torch torchaudio --index-url "$TORCH_INDEX_URL"      # torch first. CAREFUL E2
         in_env "$name" pip install -r "$ENVIRONMENTS_DIR/$name/requirements.txt"
+        local overrides="$ENVIRONMENTS_DIR/$name/requirements-overrides.txt"
+        if [ -f "$overrides" ]; then        # CAREFUL E8
+            echo "== Installing $overrides (a warning about a version conflict is expected)"
+            in_env "$name" pip install -r "$overrides"
+        fi
     fi
 }
 
@@ -60,6 +65,8 @@ if ! in_env asr-captioner hf auth whoami >/dev/null 2>&1; then
     echo "    conda run --no-capture-output -n asr-captioner hf auth login" >&2
     exit 1
 fi
+# Hugging Face waits only 10 s for a reply by default, too short on slow connections. CAREFUL E7
+export HF_HUB_DOWNLOAD_TIMEOUT=120 HF_HUB_ETAG_TIMEOUT=120
 in_env asr-captioner python -m scripts.download --settings "$SETTINGS"
 
 # 3. The ASR's own requirements, from its model folder, without changing any fixed version.
@@ -109,9 +116,16 @@ echo "== Done. Copy $PACKED_DIR and the models folder to the cluster, then run s
 #      happens, the ASR needs its own environment.
 # E5   The first build installs from requirements.txt and writes requirements.lock.txt with the
 #      exact version of every package. Commit it. Every later build, on any machine, installs
-#      exactly those versions instead, so everyone gets the same environment. The lock pins the
-#      torch build too (e.g. +cu121), so the PyTorch index given must be the same. To upgrade on
-#      purpose, delete the lock file and build again.
+#      exactly those versions instead, so everyone gets the same environment. --no-deps installs
+#      the list as it is, without re-checking dependencies, because the lock already lists every
+#      package (and would otherwise trip over the conflict in E8). The lock pins the torch build
+#      too (e.g. +cu121), so the PyTorch index given must be the same. To upgrade on purpose,
+#      delete the lock file and build again.
 # E6   conda-pack makes an environment that can be moved to another folder or machine. --force
 #      replaces an older packed file, so the packed file always matches the environment.
+# E7   A download that still times out is retried a few times and then fails. Run the script
+#      again: finished files are kept and half-finished ones continue.
+# E8   requirements-overrides.txt holds versions that contradict another package's declared
+#      dependencies but work at runtime (see the file). Installed in a separate pip command,
+#      pip warns instead of refusing.
 # ---------------------------------------------------------------------------------------------

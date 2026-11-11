@@ -10,14 +10,11 @@
 # Dependency conflict note
 # ==============================================================
 #
-# descript-audiotools 0.7.4 (a transitive dependency pulled in by parler-tts via
-# descript-audio-codec) declares protobuf<5.0.0 in its package metadata. It does NOT import
-# protobuf at runtime: the constraint is a stale artefact from an older version that used gRPC.
-# pip prints a conflict warning, but the package works correctly with protobuf 5.x.
-#
-# sentencepiece==0.2.1 is required. Version 0.2.3 triggers a "gencode version does not match
-# runtime version" error, because it bundles protobuf generated code that is incompatible with
-# the protobuf 5.x runtime.
+# descript-audiotools 0.7.4 (pulled in by parler-tts via descript-audio-codec) declares
+# protobuf<5.0.0 in its package metadata, but does not import protobuf at runtime. protobuf 5.x
+# is needed for sentencepiece 0.2.1 (see requirements-overrides.txt). pip refuses to install a
+# list that contains both, so protobuf and sentencepiece are NOT in this file: setup_envs.sh
+# installs them afterwards from requirements-overrides.txt, where pip only warns.
 #
 # Exact versions of everything installed are recorded in requirements.lock.txt after building.
 # ==============================================================
@@ -42,9 +39,7 @@ soundfile>=0.12.0
 huggingface_hub>=0.26.0
 safetensors>=0.4.0
 
-# tokeniser dependencies: sentencepiece 0.2.1 avoids the gencode/runtime mismatch (see above)
-sentencepiece==0.2.1
-protobuf>=5.27.0,<6
+# sentencepiece and protobuf: see requirements-overrides.txt
 
 # added for this project: settings, shared types and tests
 pydantic>=2

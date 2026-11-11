@@ -1,0 +1,16 @@
+# Installed by scripts/setup_envs.sh AFTER requirements.txt, in a separate pip command.
+#
+# These versions contradict a dependency declared by another package (descript-audiotools 0.7.4
+# declares protobuf<5.0.0). Installed together with requirements.txt, pip refuses with
+# ResolutionImpossible; installed afterwards, it only prints this warning, which is expected:
+#
+#     descript-audiotools 0.7.4 requires protobuf<5.0.0, but you have protobuf 5.29.6 which is incompatible.
+#
+# descript-audiotools does not import protobuf at runtime, so it works with protobuf 5.x.
+#
+# sentencepiece==0.2.1 is required. Version 0.2.3 triggers a "gencode version does not match
+# runtime version" error, because it bundles protobuf generated code that is incompatible with
+# the protobuf 5.x runtime.
+
+sentencepiece==0.2.1
+protobuf>=5.27.0,<6

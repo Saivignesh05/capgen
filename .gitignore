@@ -233,5 +233,6 @@ annotation_tasks
 .AppleDouble
 ._*
 
-/models
-/packed-envs
+models/
+packed-envs/
+old_round0_code/

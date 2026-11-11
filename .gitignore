@@ -233,38 +233,5 @@ annotation_tasks
 .AppleDouble
 ._*
 
-# ==============================================================
-# generator/ – model weights, HF cache, audio outputs
-# ==============================================================
-
-# Virtual environment inside generator/
-generator/.venv/
-
-# Model weights (~3.75 GB – never commit)
-generator/*.safetensors
-generator/*.bin
-generator/*.pt
-generator/*.pth
-generator/*.ckpt
-
-# Indic-Parler-TTS model snapshot files
-generator/models/indic-parler-tts/model.safetensors
-generator/models/indic-parler-tts/tokenizer.json
-generator/models/indic-parler-tts/tokenizer.model
-generator/models/indic-parler-tts/tokenizer_config.json
-generator/models/indic-parler-tts/special_tokens_map.json
-generator/models/indic-parler-tts/preprocessor_config.json
-generator/models/indic-parler-tts/generation_config.json
-generator/models/indic-parler-tts/.gitattributes
-generator/models/indic-parler-tts/.cache/
-generator/models/indic-parler-tts/README.md
-
-# Description tokenizer Hugging Face cache
-generator/models/description-tokenizer/models--*/
-generator/models/description-tokenizer/.locks/
-
-
-# Hugging Face credentials (defensive)
-generator/.huggingface/
-generator/token
-generator/hf_token*
+/models
+/packed-envs

@@ -99,7 +99,10 @@ class Settings(Strict):
 
     @field_validator("model_dir")
     @classmethod
-    def model_dir_must_exist(cls, model_dir: str) -> str:
+    def model_dir_must_be_an_existing_absolute_path(cls, model_dir: str) -> str:
+        # A relative path would depend on the folder a script happens to run from. CAREFUL S2
+        if not os.path.isabs(model_dir):
+            raise ValueError(f"model_dir must be an absolute path (starting with /), got: {model_dir}")
         return must_be_directory(model_dir)
 
 
@@ -172,4 +175,6 @@ def generator_settings(settings: Settings) -> GeneratorSettings:
 #      it before they exist. Each model's settings are built, and their folders checked, only when
 #      that model is about to load: Captioner(captioner_settings(settings)).
 #      model_dir itself must exist before anything runs: create it once.
+# S2   model_dir must be absolute. A relative path like ../models would be read from the folder a
+#      script runs in (code/), not from where settings.yaml is, and point somewhere unexpected.
 # ---------------------------------------------------------------------------------------------

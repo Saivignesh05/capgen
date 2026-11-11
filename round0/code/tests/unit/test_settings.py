@@ -61,6 +61,12 @@ def test_model_dir_must_exist(tmp_path):
         load_settings(path)
 
 
+def test_model_dir_must_be_absolute(tmp_path):
+    path = write_settings(tmp_path, SETTINGS_PATH, {"model_dir": "../models"})
+    with pytest.raises(ValidationError, match="absolute path"):
+        load_settings(path)
+
+
 def test_unknown_key_is_rejected(tmp_path):
     with pytest.raises(ValidationError):
         load_settings(write_settings(tmp_path, SETTINGS_PATH, {"captioner_typo": {}}))

@@ -3,8 +3,9 @@
 # Every value here is used; nothing in the code has a default.
 # Checked by code/pipeline/settings.py: unknown or misspelled keys are errors.
 
-# Folder that holds every model, each in model_dir/<repo_id>. Must exist. Set this first.
-model_dir: ../models
+# Folder that holds every model, each in model_dir/<repo_id>. Set this first.
+# It must be an absolute path (starting with /) to a folder that exists.
+model_dir: /path/to/models
 
 # Hugging Face repos, each pinned to an exact commit.
 downloads:

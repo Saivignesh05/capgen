@@ -1,0 +1,70 @@
+# Midterm scoring settings. Read by midterm/scoring/settings.py: unknown or misspelled keys are
+# errors and every key is required. Relative paths are relative to THIS file's folder.
+
+# Folder that holds every scoring model (created by setup_scoring.sh). Absolute path; set it first,
+# the same way as model_dir in round0/settings.yaml.
+model_dir: /path/to/scoring-models
+
+device: cuda              # cuda | cpu
+seed: 0                   # seed of the bootstrap (Rime Appendix A procedure)
+bootstrap_replicates: 1000
+
+# The devset: <devset>/<language>/clips/*.wav. The language of a clip is the folder it is in.
+devset: ../devset
+
+# Stages run by scoring.run, in this order. Each runs in its own process; a failed stage is logged
+# and skipped, the others still run, and results.csv is built from whatever finished.
+stages: [intelligibility, speaker_diversity, naturalness, caption_generated, judge]
+
+# Reference descriptions for the captioner's rubric score. Each source is one measure. A clip with no
+# reference in a source is skipped for that measure (logged). Files are .jsonl (one object per line)
+# or .json (a list of objects); each object has audio_path (matched to the clip by file name) and
+# the text field named here.
+references:
+  - name: ground_truth
+    measure: rubric_score
+    files: [../devset/hi/ground_truth_descriptions.jsonl, ../devset/ta/ground_truth_descriptions.jsonl]
+    text_field: ground_truth_description
+  - name: tool
+    measure: rubric_score_tool
+    files: [../devset/hi/tool_descriptions.json, ../devset/ta/tool_descriptions.json]
+    text_field: tool_description
+
+# Hugging Face models, each pinned to a commit. Downloaded into <model_dir>/hf (a Hugging Face cache).
+models:
+  judge:                  # text LLM that extracts rubric items and grades descriptions
+    repo_id: Qwen/Qwen3-8B
+    revision: b968826d9c46dd6066d109eabc6255188de91218
+  asr:                    # Rime's intelligibility ASR (gated: accept its terms on Hugging Face)
+    repo_id: ai4bharat/indic-conformer-600m-multilingual
+    revision: 2a77d305038dfc502fd9464e7d028b90381976cb
+  speaker:                # speaker verification for speaker diversity
+    repo_id: microsoft/wavlm-base-plus-sv
+    revision: feb593a6c23c1cc3d9510425c29b0a14d2b07b1e
+  xlsr:                   # embeddings for FAD (nat.py)
+    repo_id: facebook/wav2vec2-xls-r-300m
+    revision: 1a640f32ac3e39899438a2931f9924c02f080a54
+
+judge:
+  dtype: bfloat16
+  max_new_tokens: 4096
+  max_description_words: 300    # Rime cuts every description at 300 words before grading
+
+intelligibility:
+  decoding: ctc           # ctc | rnnt (IndicConformer's two decoders)
+  cer_metric: cer_ns      # cer_ns | cer | gcer, from score_hi_ta.py
+  hindi_lenient: false
+
+speaker_diversity:
+  threshold: 0.86         # cosine similarity at or above which two samples are the same speaker
+                          # (the threshold on the wavlm-base-plus-sv model card)
+
+naturalness:
+  metrics: [utmos, sigmos, fad, psd]
+  xlsr_layer: 9
+  speechmos_commit: ed25eacbfa42b99156c36ebec67a733b5dbb9b79      # tarepan/SpeechMOS tag v1.2.0
+  sigmos_commit: bf4525153b6ed998f19d9e79ff1fd00f55dec42b         # microsoft/SIG-Challenge
+  psp_eval_dir: null      # folder holding evaluation/fad.py and evaluation/psd.py (needed by nat.py)
+
+relevance:
+  samples_per_item: 2     # generated samples per item that the captioner describes for the relevance judge

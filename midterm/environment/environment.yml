@@ -1,0 +1,7 @@
+# Conda part of the "scoring" environment: every midterm scoring stage. Python packages are in
+# requirements.txt next to this file; midterm/setup_scoring.sh installs torch first, then those.
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip

@@ -1,0 +1,21 @@
+# Python packages for the "scoring" environment.
+#
+# torch and torchaudio are NOT listed: setup_scoring.sh installs them first, from the PyTorch index
+# you give (the same one as round 0, e.g. https://download.pytorch.org/whl/cu121).
+#
+# transformers is the same version as round 0's asr-captioner environment, because the
+# caption_generated stage runs the round 0 captioner (Qwen3-Omni needs 4.57 or newer) and the judge
+# is Qwen3-8B. Exact versions of everything installed are recorded in requirements.lock.txt.
+
+transformers==4.57.6
+accelerate              # device_map="auto" for the captioner and the judge
+huggingface_hub
+safetensors
+onnxruntime             # IndicConformer (ONNX) and SIGMOS; CPU build, no CUDA version to match
+pydantic>=2
+pyyaml
+numpy
+scipy                   # SIGMOS
+librosa
+soundfile
+pytest

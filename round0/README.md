@@ -44,7 +44,7 @@ runs: /home/you/round0-data/runs
 ./round0 setup
 ```
 
-The first time, it asks for your Hugging Face token: paste it and press Enter (it does not show on screen). If the command stops for any reason, for example a dropped connection, run it again: everything already done is kept. Near the end, pip prints a message starting with `ERROR: pip's dependency resolver...` about `descript-audiotools` and `protobuf`; this is expected and harmless. It ends with `Setup done`.
+The first time, it asks for your Hugging Face token: paste it and press Enter (it does not show on screen). If the command stops for any reason, for example a dropped connection, run it again: everything already done is kept (see [If something goes wrong](#if-something-goes-wrong) if a download keeps failing). Near the end, pip prints a message starting with `ERROR: pip's dependency resolver...` about `descript-audiotools` and `protobuf`; this is expected and harmless. It ends with `Setup done`.
 
 **3. Check that you have exactly our models.** This compares every model file with `checkpoint_hashes.json` and takes a few minutes:
 
@@ -110,6 +110,8 @@ On a cluster with a job scheduler such as SLURM, put the `./round0` command in y
 | `paths.yaml is missing`, `... is still the example value` or `must be a full path` | Do Setup, step 1. |
 | `the environments are not in ...` | Run `./round0 setup`, or fix `environments` in `paths.yaml`. |
 | `Read timed out`, `Retrying in 2s` | A slow connection. It retries by itself; if setup stops, run it again. |
+| `I/O error: error decoding response body` (or any other error while downloading) | The connection dropped during a download. Run `./round0 setup` again: finished files are kept and only the rest are downloaded. If it keeps happening, run `HF_HUB_DISABLE_XET=1 ./round0 setup` instead, which uses a simpler download method that copes better with unstable connections. |
+| Setup downloads models you already have | `models` in `paths.yaml` points to a different folder. Point it at the folder that already holds them (it contains `Qwen/`, `bodhan-ai/`, `ai4bharat/` and `google/`); setup then prints `Already downloaded` and skips them. |
 | `401`, `403`, `gated`, `restricted` | Accept the terms of both gated models with the account you logged in with. |
 | `MISMATCH: <name>` | That model is damaged or incomplete: delete its folder inside your models folder and run `./round0 setup` again. |
 | `CUDA out of memory` or `no CUDA GPU` | Not enough GPU memory, or no GPU visible: see "What you need". |

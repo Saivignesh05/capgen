@@ -17,14 +17,16 @@
 # MODE with RESUME=1: every finished item is kept.
 #
 #SBATCH --job-name=midterm
+#SBATCH --partition=normal          # the GPU partition in the HPC user guide
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:1                # EDIT: gpu:2 for two 40 GB A100s
+#SBATCH --ntasks=1
+#SBATCH --gres=gpu:2                # two GPUs: enough for the captioner on 40 GB or 80 GB GPUs.
+#                                   # If `srun nvidia-smi` shows 80 GB GPUs, gpu:1 is enough and may start sooner.
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=96G
-#SBATCH --time=12:00:00
+#SBATCH --mem=90000                 # MB of CPU memory, as in the user guide's GPU example
+#SBATCH --time=12:00:00             # must not exceed the partition's limit: check with sinfo -o "%P %l"
 #SBATCH --output=midterm-%j.out     # every log line of the job: round 0 and scoring
 #SBATCH --error=midterm-%j.out
-##SBATCH --partition=EDIT           # EDIT: your GPU partition (remove one leading # to use it)
 
 set -uo pipefail
 REPO=/full/path/to/capgen           # EDIT: the repo on the HPC (git checkout of the midterm branch)
@@ -33,6 +35,8 @@ RUNS=/full/path/to/runs             # EDIT: where runs go (one subfolder per MOD
 MODE="${MODE:-split}"
 RESUME="${RESUME:-0}"               # 1: continue the latest run of each part instead of starting new ones
 
+module purge 2>/dev/null || true    # as the user guide does: no loaded module may change Python or CUDA paths.
+                                    # The pipeline uses the environments' own Python by absolute path.
 log() { echo "$(date '+%F %T') [sbatch] $*"; }
 log "job ${SLURM_JOB_ID:--} on $(hostname), MODE=$MODE RESUME=$RESUME"
 [ -d "$REPO/midterm" ] || { log "ERROR: REPO=$REPO is not the repo (no midterm/)"; exit 1; }

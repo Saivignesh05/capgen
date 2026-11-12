@@ -177,8 +177,8 @@ Use this when the HPC's login node can reach the internet (`curl -sI https://hug
 Done once; about 1–2 h, mostly downloads.
 
 **Where to run each step.** Builds and downloads run on the **login node** (they need internet, not a
-GPU). If your HPC limits long jobs on login nodes, run them in an interactive CPU job instead
-(`srun --pty bash`) when compute nodes also have internet. The smoke test and the real runs need a
+GPU). If your HPC limits long jobs on login nodes, run them in an interactive CPU allocation instead
+(`salloc -N 1 -n 1`, then each command with `srun`), if compute nodes also have internet. The smoke test and the real runs need a
 **GPU node**. The pipeline never downloads during a run (it sets `HF_HUB_OFFLINE=1`), so it works
 even when GPU nodes have no internet.
 
@@ -188,9 +188,19 @@ even when GPU nodes have no internet.
   [ai4bharat/indic-parler-tts](https://huggingface.co/ai4bharat/indic-parler-tts) and
   [ai4bharat/indic-conformer-600m-multilingual](https://huggingface.co/ai4bharat/indic-conformer-600m-multilingual),
   and a "Read" access token from https://huggingface.co/settings/tokens.
-- conda on the HPC (often `module load anaconda` or `module load miniconda`; ask your admins).
-  `conda --version` must work.
-- The CUDA version of the GPU nodes: run `nvidia-smi` on one; the top right must say 12.1 or higher.
+- conda. The HPC user guide does not mention it, so check for a module first, and otherwise install
+  Miniconda in your own space (no admin rights needed; put it on the large disk, not in a home
+  folder with a quota):
+  ```bash
+  module avail 2>&1 | grep -i conda       # listed? then: module load <that name>
+  # not listed:
+  wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+  bash Miniconda3-latest-Linux-x86_64.sh -b -p /scratch/$USER/miniconda3
+  source /scratch/$USER/miniconda3/bin/activate
+  conda --version                         # must print a version
+  ```
+  Run the `source` line (or the `module load`) again in every new terminal before using conda.
+- What the GPU partition offers (section 8, step 0): GPU model and memory, time limit, CUDA version.
 
 **1. Get the code** (login node):
 ```bash
@@ -277,22 +287,41 @@ The last command must end with `All checkpoints match.` Then continue with secti
 
 ## 8. Running (both setups)
 
-**1. Smoke test** on a GPU node, a few minutes, before the long job:
-```bash
-srun --gres=gpu:1 --pty bash          # or however your HPC gives an interactive GPU shell
-cd "$REPO/midterm" && "$ENVS/scoring/bin/python" -m scoring.check --settings settings.yaml
-```
-Every line must say `PASS`, and the transcripts it prints must be real Hindi and Tamil text. Fix any
-`FAIL` first (section 9); its message says what is missing.
+The HPC uses SLURM. The GPU partition is `normal` (from the HPC user guide); the job file already
+asks for it.
 
-**2. Edit the job file** `midterm/slurm/run_midterm.sbatch`: the lines marked `EDIT` (`REPO`, `ENVS`,
-`RUNS`, the GPU partition, and `--gres=gpu:2` if your GPUs have 40 GB).
+**0. Know the partition** (once, login node):
+```bash
+sinfo -o "%P %l %G %D"        # partitions, their time limit, GPUs per node, node count
+```
+The time limit of `normal` must be at least the `--time` in the job file (12 h); lower it in the job
+file if needed. The GPU model shows up in step 1.
+
+**1. Smoke test** on a GPU node, a few minutes, before the long job. As in the HPC user guide, ask for
+an interactive allocation with `salloc`, then run each command on the node with `srun`:
+```bash
+salloc --partition=normal -N 1 --gres=gpu:2 --mem=90000 --ntasks-per-node=1
+srun nvidia-smi                       # the GPUs you got: model, memory, and "CUDA Version" (must be 12.1 or higher)
+cd "$REPO/midterm" && srun "$ENVS/scoring/bin/python" -m scoring.check --settings settings.yaml
+exit                                  # give the GPUs back
+```
+Every line of the check must say `PASS`, and the transcripts it prints must be real Hindi and Tamil
+text. Fix any `FAIL` first (section 9); its message says what is missing. Without `srun`, a command
+runs on the login node, which has no GPU.
+
+If `nvidia-smi` shows 80 GB GPUs, one GPU is enough: use `--gres=gpu:1` here and in the job file
+(it may start sooner). With 40 GB GPUs keep 2. V100s (no bfloat16) do not work.
+
+**2. Edit the job file** `midterm/slurm/run_midterm.sbatch`: the three lines marked `EDIT` (`REPO`,
+`ENVS`, `RUNS`), and `--gres`/`--time` if step 0 or 1 says so. Partition, memory and task count are
+already set as in the HPC user guide.
 
 **3. Submit** from the repo root:
 ```bash
 sbatch midterm/slurm/run_midterm.sbatch                          # MODE=split: run A + run B + merge
-squeue -u $USER                                                  # is it running?
+squeue -u $USER                                                  # is it running? (PD = waiting, R = running)
 tail -f midterm-<jobid>.out                                      # watch it
+scancel <jobid>                                                  # stop it
 ```
 
 | MODE | What runs | Time (one 80 GB GPU, rough) | The results.csv to submit |
@@ -353,6 +382,9 @@ missing measures are listed. Common causes:
 
 | Message | Cause, and what to do |
 |---|---|
+| `sbatch: error: invalid partition` / `time limit` / `Requested node configuration is not available` | The job asks for more than the partition allows. Compare with `sinfo -o "%P %l %G"` (section 8 step 0) and lower `--time`, `--gres` or `--mem` in the job file. |
+| Job stays `PD` for a long time | The GPUs are busy. `squeue -u $USER --start` estimates the start. With 80 GB GPUs, `--gres=gpu:1` may start sooner. |
+| `conda: command not found` | Load conda first: `module load ...` or `source /scratch/$USER/miniconda3/bin/activate` (section 6 step 0). |
 | `... not found: unpack the environments first` | `ENVS` in the sbatch file is wrong. It must hold `asr-captioner/`, `generator/` and `scoring/`. |
 | `set model_dir in ...` | A settings file still has `/path/to/...`: section 6 step 2 (or 7 step 4). |
 | `... is not in .../hf. Run scoring/download.py` | A scoring model was not downloaded (or not copied). Redo the scoring setup. |

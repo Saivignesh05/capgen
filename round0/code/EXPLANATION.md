@@ -6,35 +6,40 @@ For the steps to reproduce the results, see `../README.md`.
 
 ```
 round0/
-├── README.md                   how to reproduce the results
-├── settings.yaml               every setting and value, for devset runs
-├── settings_eval.yaml          the same, with 10 samples per description for the evaluation outputs
-├── paths.yaml                  where the environments and runs are on this machine (not part of the results)
-├── checkpoint_hashes.json      SHA-256 of every model checkpoint (written by scripts/hash_checkpoints.py)
+├── README.md                   how to set up and run
+├── round0                      the one command: ./round0 setup, check, test, run, resume, status, ...
+├── paths.example.yaml          copied to paths.yaml: folders on this machine (models, environments, runs)
+├── settings.yaml               every setting that defines the results (devset runs: 1 sample per clip)
+├── settings_eval.yaml          the same, with 10 samples per clip for the evaluation outputs
+├── checkpoint_hashes.json      SHA-256 of every model checkpoint (written by ./round0 freeze)
 └── code/
     ├── EXPLANATION.md          this file
-    ├── run.sh                  the short way to run the pipeline (reads ../paths.yaml)
-    ├── test.sh                 runs every test in the right environment (reads ../paths.yaml)
+    ├── commands/               shell scripts behind ./round0
+    │   ├── common.sh           reads paths.yaml; shared by the others
+    │   ├── setup.sh            build environments, log in, download models (needs internet)
+    │   ├── test.sh             run every test in the right environment
+    │   ├── pack.sh, unpack.sh  move the environments to a machine without internet
     ├── pipeline/               the Python package
     │   ├── audio_types.py      shared inputs and outputs
-    │   ├── settings.py         the classes that check settings.yaml, and load_settings()
+    │   ├── settings.py         the classes that check settings.yaml and paths.yaml
     │   ├── seeds.py            how each generated sample's seed is derived
     │   └── models/
     │       ├── captioner.py    Captioner   (asr-captioner environment)
     │       ├── asr.py          ASR         (asr-captioner environment)
     │       └── generator.py    Generator   (generator environment)
-    ├── scripts/
-    │   ├── setup_envs.sh       build environments, download models, pack (machine with internet)
-    │   ├── unpack_envs.sh      unpack environments (cluster)
+    ├── scripts/                Python scripts behind ./round0
+    │   ├── run.py              the runner: runs, resuming, status, lineage
+    │   ├── records.py          the record types of a run's files
     │   ├── download.py         download every model at its pinned commit
     │   ├── hash_checkpoints.py write or check checkpoint_hashes.json
-    │   ├── run.py              the runner: runs, resuming, lineage
-    │   ├── records.py          the record types of a run's files
+    │   ├── write_lock.py       write an environment's lock file
+    │   ├── package.py          make the submission zip
     │   └── stages/
     │       ├── transcribe.py   stage 1 (asr-captioner): identify language, transcribe
     │       ├── describe.py     stage 2 (asr-captioner): describe
-    │       └── generate.py     stage 3 (generator): speak each transcript several times
-    ├── environments/
+    │       └── generate.py     stage 3 (generator): speak each transcript
+    ├── environments/           what each environment contains (not the installed environments)
+    │   ├── torch-index.txt     the PyTorch index (CUDA 12.1 build)
     │   ├── asr-captioner/      environment.yml, requirements.txt, requirements.lock.txt
     │   └── generator/          environment.yml, requirements.txt, requirements-overrides.txt, requirements.lock.txt
     └── tests/
@@ -43,7 +48,7 @@ round0/
         └── models/             real models
 ```
 
-Settings live outside `code/` so that what runs (the code) and how it is configured (one YAML file) stay separate. Every script takes the settings file as `--settings`; nothing has a default.
+Shell scripts live in `commands/` and Python in `pipeline/` and `scripts/`; `./round0` is the only thing a user runs. Settings live outside `code/` so that what runs (the code) and how it is configured stay separate.
 
 ## The models
 
@@ -70,14 +75,14 @@ All bookkeeping lives in the runner. The stages know nothing about runs: each ge
 
 ### Starting it
 
-`code/run.sh` is the short way: it reads the environments and runs folders from `paths.yaml` and passes them to `scripts/run.py`, so only what changes between runs is typed:
-
 ```bash
-code/run.sh new --stages transcribe,describe,generate --settings settings.yaml --clips /path/to/devset
-code/run.sh resume --stages describe,generate --run latest
+./round0 run all /path/to/devset             # new run, settings.yaml
+./round0 run-eval all /path/to/clips         # new run, settings_eval.yaml
+./round0 resume describe,generate latest     # continue the latest run
+./round0 status latest                       # how far it got, and its last errors
 ```
 
-`paths.yaml` holds machine-specific folders only. It is deliberately separate from `settings.yaml`, which describes the results and is copied into every run.
+`./round0` reads `paths.yaml` and calls `python -m scripts.run new|resume|status` with the asr-captioner environment's Python.
 
 ### Runs
 
@@ -120,7 +125,7 @@ A clip is spoken once it has both a transcript and a description, `samples_per_i
 
 | What | How it is fixed |
 |---|---|
-| Model weights | Each repo pinned to a commit in `settings.yaml`; every file's SHA-256 in `checkpoint_hashes.json`, checked with `scripts/hash_checkpoints.py --check` |
+| Model weights | Each repo pinned to a commit in `settings.yaml`; every file's SHA-256 in `checkpoint_hashes.json`, checked with `./round0 check` |
 | Python packages | `requirements.lock.txt` per environment: exact versions, used by every build after the first |
 | Settings | One file, copied into each run; its SHA-256 is in `run.json` |
 | Code | The git commit is in `run.json` |
@@ -133,36 +138,42 @@ What cannot be fixed in software is GPU arithmetic: the same inputs can give sli
 
 The competition asks for "the SHA-256 hash of every model checkpoint": proof that the exact weights you used are the ones a reviewer runs. A Hugging Face commit says which files to download; a SHA-256 hash proves which bytes are on disk, including after copying them to another machine.
 
-`scripts/hash_checkpoints.py` hashes every file of each model folder, and gives each model one hash: the SHA-256 of its `sha256sum`-style list of `<file hash>  <file name>` lines. Hugging Face's `.cache` bookkeeping and the download marker are not part of a checkpoint and are skipped. `--write` creates `checkpoint_hashes.json` once; `--check` recomputes and compares, and exits with an error on any mismatch.
+`scripts/hash_checkpoints.py` (behind `./round0 freeze` and `./round0 check`) hashes every file of each model folder, and gives each model one hash: the SHA-256 of its `sha256sum`-style list of `<file hash>  <file name>` lines. Hugging Face's `.cache` bookkeeping and the download marker are not part of a checkpoint and are skipped. `--write` creates `checkpoint_hashes.json` once; `--check` recomputes and compares, and exits with an error on any mismatch.
 
-## Settings
+## Settings and paths
 
-`settings.yaml` has one section per part. `pipeline/settings.py` has a class for each section: unknown or misspelled keys are errors, every key is required, and values cannot change after loading.
+There are two kinds of configuration, kept apart on purpose:
 
-- `model_dir`: every model is stored in `model_dir/<repo_id>`, so each repo id is written once and the download folder and the load folder cannot drift apart. This folder must exist.
+- **`settings.yaml`** describes the results: every model with its pinned commit, decoding options, samples per clip and the seed. It is the same on every machine, is copied into every run, and its SHA-256 is in `run.json`.
+- **`paths.yaml`** says where things are on this machine: `models`, `environments` and `runs`. Each user makes it from `paths.example.yaml`; it is not part of the results, is ignored by git, and is never packaged, so nobody's folders or username end up in the submission. Every model is stored in `models/<repo_id>`, so each repo id is written once and the download folder and the load folder cannot drift apart.
+
+`pipeline/settings.py` has a class for each section of both files: unknown or misspelled keys are errors, every key is required, values cannot change after loading, and paths must be absolute.
+
+`settings.yaml` has these sections:
+
 - `downloads`: each repo with its pinned commit.
 - `captioner`, `asr`, `generator`: model options.
-- `generation`: samples per item and the base seed.
+- `generation`: samples per clip and the base seed.
 
-There are two settings files. `settings.yaml` makes 1 sample per clip, enough for devset runs; `settings_eval.yaml` makes 10, as the competition asks for each evaluation description. Everything else is identical, and `tests/unit/test_settings.py` fails if the two files ever differ in anything but `samples_per_item`. Because each sample's seed depends only on the clip and the sample number, sample 0 is the same in both.
+There are two settings files. `settings.yaml` makes 1 sample per clip, enough for devset runs; `settings_eval.yaml` makes 10, as the competition asks. Everything else is identical, and `tests/unit/test_settings.py` fails if the two files ever differ in anything but `samples_per_item`. Because each sample's seed depends only on the clip and the sample number, sample 0 is the same in both.
 
-Loading `settings.yaml` does not check that model folders exist, because `scripts/download.py` loads it before they do. Each model's settings (`captioner_settings(settings)` and the others) combine its options with its folder and check the folder only when that model is about to load.
+Loading the files does not check that model folders exist, because `scripts/download.py` loads them before they do. Each model's settings (`captioner_settings(settings, paths)` and the others) combine its options with its folder and check the folder only when that model is about to load.
 
 ## Two environments
 
 - Qwen3-Omni was added to `transformers` in version 4.57.0.
 - `parler-tts` requires `transformers` 4.46.1 exactly.
 
-So there are two conda environments, each defined in its own folder under `environments/`:
+So there are two conda environments, `asr-captioner` and `generator`. `./round0 setup` creates them inside the `environments` folder of `paths.yaml` (as conda environments at that path), so on every machine they are found in the same place. Each is defined in its own folder under `code/environments/`:
 
 - `environment.yml`: the conda part, Python 3.10 and pip.
 - `requirements.txt`: what the environment needs, fixing only the versions that must be fixed. The generator's file comes from the verified generator setup, with its fixes for `protobuf` and `sentencepiece`.
-- `requirements.lock.txt`: written by the first build with the exact version of every package. Every later build installs from it instead, so everyone gets the same environment.
-- `requirements-overrides.txt` (generator only): `protobuf` and `sentencepiece` versions that contradict a dependency declared by `descript-audiotools` but work at runtime. pip refuses to install them in the same command as everything else, so they are installed in a second command, where pip only warns.
+- `requirements.lock.txt`: the exact version of every package, written by the first build (`scripts/write_lock.py`). Every later build installs exactly these versions, so everyone gets the same environment. Packages installed from git keep their commit; packages conda installed are written as plain versions, so the file works on any machine. An empty lock file is never written.
+- `requirements-overrides.txt` (generator only): `protobuf` and `sentencepiece` versions that contradict a dependency declared by `descript-audiotools` but work at runtime. pip refuses to install them in the same command as everything else, so they are installed in a second command, where pip only prints a message.
 
-`torch` is in neither `requirements.txt`: the first build installs it first, from the PyTorch index you give, because the right CUDA build depends on the GPU driver. The ASR's own requirements come from its model folder and are installed with the fixed versions as constraints, so if it ever needs something different, the build stops instead of silently breaking the captioner.
+`torch` is in neither `requirements.txt`: the first build installs it first, from the index in `environments/torch-index.txt` (the CUDA 12.1 build, which needs an NVIDIA driver for CUDA 12.1 or newer). The ASR's own requirements come from its model folder and are installed with the fixed versions as constraints, so if it ever needs something different, the build stops instead of silently breaking the captioner.
 
-The cluster has no internet, so environments are built elsewhere, packed into one file each with `conda-pack`, copied, and unpacked with `unpack_envs.sh`.
+A machine without internet gets the environments with `./round0 pack` (on a machine with internet) and `./round0 unpack` (on the machine without), which use `conda-pack`.
 
 ## Downloads
 
@@ -193,13 +204,15 @@ Lines that need care end with a tag such as `# CAREFUL C4`. Each code is explain
 | D | `scripts/download.py` |
 | H | `scripts/hash_checkpoints.py` |
 | R | `scripts/run.py` |
-| E | `scripts/setup_envs.sh` |
+| E | `code/commands/setup.sh` |
+| L | `scripts/write_lock.py` |
+| P | `scripts/package.py` |
 
 Fields in `pipeline/settings.py` name the file their code is in, for example `CAREFUL C1 (pipeline/models/captioner.py)`.
 
 ## Tests
 
-Run from `code/`. Anything a machine cannot run is skipped with a reason (`pytest -rs` prints them). Run the generator tests in the `generator` environment and the rest in `asr-captioner`; a test run in the wrong environment skips.
+Run them with `./round0 test`, which runs the generator tests in the `generator` environment and the rest in `asr-captioner`, with the ASR's folder on `PYTHONPATH`. Anything a machine cannot run is skipped with its reason printed; a test run in the wrong environment skips.
 
 | Test file | Uses real models? | Skipped when |
 |---|---|---|
@@ -209,8 +222,10 @@ Run from `code/`. Anything a machine cannot run is skipped with a reason (`pytes
 | `tests/unit/test_run.py` | No | `soundfile` is not installed |
 | `tests/unit/test_download.py` | No (the download is faked) | `huggingface_hub` is not installed |
 | `tests/unit/test_hash_checkpoints.py` | No (small fake models) | `huggingface_hub` is not installed |
-| `tests/models/test_captioner.py` | Yes | `settings.yaml` cannot load, model not downloaded, no CUDA, or less than ~70 GB GPU memory in total (~135 GB in `float32`) |
-| `tests/models/test_asr.py` | Yes | `settings.yaml` cannot load, model not downloaded, or its folder not on `PYTHONPATH` |
-| `tests/models/test_generator.py` | Yes | `settings.yaml` cannot load, model or tokenizer not downloaded, or `device: cuda` without a GPU |
+| `tests/unit/test_write_lock.py` | No | never |
+| `tests/unit/test_package.py` | No | never |
+| `tests/models/test_captioner.py` | Yes | `settings.yaml` or `paths.yaml` cannot load, model not downloaded, no CUDA, or less than ~70 GB GPU memory in total (~135 GB in `float32`) |
+| `tests/models/test_asr.py` | Yes | `settings.yaml` or `paths.yaml` cannot load, model not downloaded, or its folder not on `PYTHONPATH` (not run through `./round0 test`) |
+| `tests/models/test_generator.py` | Yes | `settings.yaml` or `paths.yaml` cannot load, model or tokenizer not downloaded, or `device: cuda` without a GPU |
 
-The real-speech ASR tests use `tests/data/hi.wav` and `tests/data/ta.wav` (short clips you add) and skip without them; the other tests use a generated tone. Each model loads once per test file.
+The real-speech ASR tests use `tests/data/hi.wav` and `tests/data/ta.wav`, short clips you add yourself (they are not shipped, since recordings of people's voices are not ours to redistribute), and skip without them; the other tests use a generated tone. Each model loads once per test file.

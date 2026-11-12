@@ -74,3 +74,7 @@ def test_unknown_or_empty_stages_are_rejected():
     for text in ["transcribe,translate", ""]:
         with pytest.raises(argparse.ArgumentTypeError):
             parse_stages(text)
+
+
+def test_all_means_every_stage():
+    assert parse_stages("all") == ["transcribe", "describe", "generate"]

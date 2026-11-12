@@ -4,11 +4,11 @@ from typing import get_args
 import pytest
 from pydantic import ValidationError
 
-from helpers import repo_settings, speech_path, write_tone
+from helpers import repo_settings_and_paths, speech_path, write_tone
 
-settings = repo_settings()
+settings, paths = repo_settings_and_paths()
 pytest.importorskip("soundfile")
-pytest.importorskip("indic_transcribe", reason="put the ASR model folder on PYTHONPATH (see README)")
+pytest.importorskip("indic_transcribe", reason="run the tests with ./round0 test, which puts the ASR model folder on PYTHONPATH")
 
 from pipeline.audio_types import AudioClip, AudioLanguage, AudioTranscript
 from pipeline.models.asr import ASR
@@ -18,9 +18,9 @@ from pipeline.settings import asr_settings
 @pytest.fixture(scope="module")
 def model_settings():
     try:
-        return asr_settings(settings)
+        return asr_settings(settings, paths)
     except ValidationError:
-        pytest.skip("ASR model not downloaded (run scripts/download.py)")
+        pytest.skip("ASR model not downloaded (run ./round0 setup)")
 
 
 @pytest.fixture(scope="module")

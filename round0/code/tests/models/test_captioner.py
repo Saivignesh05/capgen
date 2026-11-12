@@ -2,9 +2,9 @@
 import pytest
 from pydantic import ValidationError
 
-from helpers import repo_settings, require_cuda, write_tone
+from helpers import repo_settings_and_paths, require_cuda, write_tone
 
-settings = repo_settings()
+settings, paths = repo_settings_and_paths()
 for package in ["torch", "librosa", "soundfile"]:
     pytest.importorskip(package)
 pytest.importorskip("transformers", minversion="4.57", reason="needs the asr-captioner environment (transformers 4.57 or newer)")
@@ -17,9 +17,9 @@ from pipeline.settings import captioner_settings
 @pytest.fixture(scope="module")
 def model_settings():
     try:
-        return captioner_settings(settings)
+        return captioner_settings(settings, paths)
     except ValidationError:
-        pytest.skip("captioner model not downloaded (run scripts/download.py)")
+        pytest.skip("captioner model not downloaded (run ./round0 setup)")
 
 
 @pytest.fixture(scope="module")

@@ -8,20 +8,22 @@ import os
 import numpy as np
 import pytest
 
-from pipeline.settings import Settings, load_settings
+from pipeline.settings import Paths, Settings, load_paths, load_settings
 
 CODE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(CODE_DIR, "tests", "data")
 SETTINGS_PATH = os.path.join(os.path.dirname(CODE_DIR), "settings.yaml")      # round0/settings.yaml (devset runs)
 EVAL_SETTINGS_PATH = os.path.join(os.path.dirname(CODE_DIR), "settings_eval.yaml")      # round0/settings_eval.yaml
+PATHS_PATH = os.path.join(os.path.dirname(CODE_DIR), "paths.yaml")      # round0/paths.yaml (your machine's folders)
+EXAMPLE_PATHS_PATH = os.path.join(os.path.dirname(CODE_DIR), "paths.example.yaml")
 
 
-def repo_settings() -> Settings:
-    """The repository's settings.yaml, or skip the whole test file if it cannot be loaded."""
+def repo_settings_and_paths() -> tuple[Settings, Paths]:
+    """The repository's settings.yaml and paths.yaml, or skip the whole test file if they cannot be loaded."""
     try:
-        return load_settings(SETTINGS_PATH)
+        return load_settings(SETTINGS_PATH), load_paths(PATHS_PATH)
     except Exception as error:
-        pytest.skip(f"cannot load {SETTINGS_PATH} (is model_dir set to an existing folder?): {error}", allow_module_level=True)
+        pytest.skip(f"cannot load settings.yaml or paths.yaml (copy paths.example.yaml to paths.yaml and set its folders): {error}", allow_module_level=True)
 
 
 def require_cuda(min_total_gb: float) -> None:
@@ -46,5 +48,5 @@ def speech_path(language: str) -> str:
     """Path of a real speech clip in tests/data/<language>.wav, or skip if it is not there."""
     path = os.path.join(DATA_DIR, f"{language}.wav")
     if not os.path.isfile(path):
-        pytest.skip(f"no speech clip at {path} (see EXPLANATION.md: Tests)")
+        pytest.skip(f"no speech clip at {path} (optional, see EXPLANATION.md: Tests)")
     return path

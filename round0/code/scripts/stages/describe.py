@@ -7,20 +7,21 @@ import argparse
 
 from pipeline.audio_types import AudioClip
 from pipeline.models.captioner import Captioner
-from pipeline.settings import captioner_settings, load_settings
+from pipeline.settings import captioner_settings, load_paths, load_settings
 from scripts.records import ClipRecord, DescriptionRecord, ErrorRecord, append_record, read_records
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--settings", required=True)
+    parser.add_argument("--paths", required=True)
     parser.add_argument("--tasks", required=True, help="JSONL of ClipRecord")
     parser.add_argument("--output", required=True, help="descriptions.jsonl")
     parser.add_argument("--errors", required=True, help="errors.jsonl")
     args = parser.parse_args()
 
     tasks = read_records(args.tasks, ClipRecord)
-    captioner = Captioner(captioner_settings(load_settings(args.settings)))
+    captioner = Captioner(captioner_settings(load_settings(args.settings), load_paths(args.paths)))
 
     for number, task in enumerate(tasks, 1):
         try:

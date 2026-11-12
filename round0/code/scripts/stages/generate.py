@@ -13,20 +13,21 @@ import torch
 
 from pipeline.audio_types import AudioDescription, AudioTranscript
 from pipeline.models.generator import Generator
-from pipeline.settings import generator_settings, load_settings
+from pipeline.settings import generator_settings, load_paths, load_settings
 from scripts.records import AudioRecord, ErrorRecord, GenerationTask, append_record, read_records
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--settings", required=True)
+    parser.add_argument("--paths", required=True)
     parser.add_argument("--tasks", required=True, help="JSONL of GenerationTask")
     parser.add_argument("--output", required=True, help="audio.jsonl, in the run folder")
     parser.add_argument("--errors", required=True, help="errors.jsonl")
     args = parser.parse_args()
 
     tasks = read_records(args.tasks, GenerationTask)
-    generator = Generator(generator_settings(load_settings(args.settings)))
+    generator = Generator(generator_settings(load_settings(args.settings), load_paths(args.paths)))
     run_folder = os.path.dirname(os.path.abspath(args.output))
 
     for number, task in enumerate(tasks, 1):

@@ -1,14 +1,14 @@
 """Download every model in settings.yaml, each pinned to its exact commit. Safe to re-run.
 
-Run from the code folder, on a machine with internet:
-    python -m scripts.download --settings ../settings.yaml
+Started by `./round0 setup`. On its own, from the code folder, on a machine with internet:
+    python -m scripts.download --settings ../settings.yaml --paths ../paths.yaml
 """
 import argparse
 import os
 
 from huggingface_hub import snapshot_download     # CAREFUL D1
 
-from pipeline.settings import DownloadSettings, load_settings, model_folder
+from pipeline.settings import DownloadSettings, load_paths, load_settings, model_folder
 
 MARKER_NAME = ".download_complete.json"     # written into the model's folder after a download finishes
 
@@ -41,11 +41,13 @@ def download(repo: DownloadSettings, local_dir: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--settings", required=True, help="path to settings.yaml")
+    parser.add_argument("--paths", required=True, help="path to paths.yaml")
     args = parser.parse_args()
 
     settings = load_settings(args.settings)
+    paths = load_paths(args.paths)
     for _name, repo in settings.downloads.named():
-        download(repo, model_folder(settings, repo))
+        download(repo, model_folder(paths, repo))
 
 
 if __name__ == "__main__":
@@ -55,9 +57,8 @@ if __name__ == "__main__":
 # ---------------------------------------------------------------------------------------------
 # CAREFUL codes
 #
-# D1   Run on a machine with internet (scripts/setup_envs.sh does), then copy model_dir to the
-#      cluster and set model_dir in settings.yaml there to where you put it. The ASR and generator
-#      repos are gated: accept their terms on Hugging Face and log in first.
+# D1   Needs internet. The ASR and generator repos are gated: accept their terms on Hugging Face and
+#      log in first (./round0 setup asks you to log in when needed).
 # D2   A branch name like "main" changes over time; a commit hash never does, so every run gets the
 #      exact same files. The hashes in settings.yaml were the latest commits on 2026-11-11.
 # D3   The marker is written only after snapshot_download succeeds, so its presence means the

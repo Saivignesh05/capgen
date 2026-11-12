@@ -1,7 +1,8 @@
-"""Settings: the classes that check settings.yaml, and the function that loads it.
+"""Settings: the classes that check settings.yaml and paths.yaml, and the functions that load them.
 
-The values live in settings.yaml, outside the code folder. Every script takes its path as
---settings. Nothing here has a default value.
+settings.yaml describes the results: models, revisions, decoding, seeds. It is the same on every
+machine. paths.yaml says where things are on this machine: models, environments, runs. Both live
+outside the code folder; scripts take them as --settings and --paths. Nothing here has a default.
 """
 import os
 import re
@@ -90,26 +91,41 @@ class GenerationOptions(Strict):
 class Settings(Strict):
     """Everything in settings.yaml."""
 
-    model_dir: str      # every model sits in model_dir/<repo_id>; must exist
     downloads: Downloads
     captioner: CaptionerOptions
     asr: ASROptions
     generator: GeneratorOptions
     generation: GenerationOptions
 
-    @field_validator("model_dir")
-    @classmethod
-    def model_dir_must_be_an_existing_absolute_path(cls, model_dir: str) -> str:
-        # A relative path would depend on the folder a script happens to run from. CAREFUL S2
-        if not os.path.isabs(model_dir):
-            raise ValueError(f"model_dir must be an absolute path (starting with /), got: {model_dir}")
-        return must_be_directory(model_dir)
-
 
 def load_settings(path: str) -> Settings:
     """Read and check settings.yaml."""
     with open(path, encoding="utf-8") as f:
         return Settings.model_validate(yaml.safe_load(f))
+
+
+class Paths(Strict):
+    """Everything in paths.yaml: folders on this machine. Not part of the results."""
+
+    models: str         # every model sits in models/<repo_id>
+    environments: str   # holds the asr-captioner and generator environments
+    runs: str           # holds every run
+
+    @field_validator("models", "environments", "runs")
+    @classmethod
+    def must_be_an_absolute_path(cls, path: str) -> str:
+        # A relative path would depend on the folder a script happens to run from. CAREFUL S2
+        if path.startswith("/absolute/path/"):
+            raise ValueError(f"still the example value in paths.yaml: {path}. Replace it with a real folder.")
+        if not os.path.isabs(path):
+            raise ValueError(f"must be an absolute path (starting with /), got: {path}")
+        return path
+
+
+def load_paths(path: str) -> Paths:
+    """Read and check paths.yaml."""
+    with open(path, encoding="utf-8") as f:
+        return Paths.model_validate(yaml.safe_load(f))
 
 
 # =============================================================================================
@@ -144,37 +160,36 @@ class GeneratorSettings(GeneratorOptions):
         return must_be_directory(directory)
 
 
-def model_folder(settings: Settings, download: DownloadSettings) -> str:
-    """Where a downloaded repo lives: model_dir/<repo_id>."""
-    return os.path.join(settings.model_dir, download.repo_id)
+def model_folder(paths: Paths, download: DownloadSettings) -> str:
+    """Where a downloaded repo lives: models/<repo_id>."""
+    return os.path.join(paths.models, download.repo_id)
 
 
-def captioner_settings(settings: Settings) -> CaptionerSettings:
+def captioner_settings(settings: Settings, paths: Paths) -> CaptionerSettings:
     return CaptionerSettings(
-        model_dir=model_folder(settings, settings.downloads.captioner),
+        model_dir=model_folder(paths, settings.downloads.captioner),
         **settings.captioner.model_dump())
 
 
-def asr_settings(settings: Settings) -> ASRSettings:
+def asr_settings(settings: Settings, paths: Paths) -> ASRSettings:
     return ASRSettings(
-        model_dir=model_folder(settings, settings.downloads.asr),
+        model_dir=model_folder(paths, settings.downloads.asr),
         **settings.asr.model_dump())
 
 
-def generator_settings(settings: Settings) -> GeneratorSettings:
+def generator_settings(settings: Settings, paths: Paths) -> GeneratorSettings:
     return GeneratorSettings(
-        model_dir=model_folder(settings, settings.downloads.generator),
-        description_tokenizer_dir=model_folder(settings, settings.downloads.description_tokenizer),
+        model_dir=model_folder(paths, settings.downloads.generator),
+        description_tokenizer_dir=model_folder(paths, settings.downloads.description_tokenizer),
         **settings.generator.model_dump())
 
 
 # ---------------------------------------------------------------------------------------------
 # CAREFUL codes
 #
-# S1   Loading settings.yaml does not check the model folders, because scripts/download.py loads
-#      it before they exist. Each model's settings are built, and their folders checked, only when
-#      that model is about to load: Captioner(captioner_settings(settings)).
-#      model_dir itself must exist before anything runs: create it once.
-# S2   model_dir must be absolute. A relative path like ../models would be read from the folder a
-#      script runs in (code/), not from where settings.yaml is, and point somewhere unexpected.
+# S1   Loading the settings does not check the model folders, because scripts/download.py loads
+#      them before the folders exist. Each model's settings are built, and its folders checked, only
+#      when that model is about to load: Captioner(captioner_settings(settings, paths)).
+# S2   Paths must be absolute. A relative path like ../models would be read from the folder a
+#      script runs in, not from where paths.yaml is, and point somewhere unexpected.
 # ---------------------------------------------------------------------------------------------

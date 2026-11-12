@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# The one command for round 0. Run ./round0 to see what it can do.
+set -euo pipefail
+COMMANDS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/code/commands"
+CALLER_DIR="$PWD"       # folders given on the command line are relative to where you are
+
+usage() {
+    cat <<'EOF'
+Round 0: one command for everything. Edit paths.yaml first.
+
+Setting up (once):
+  ./round0 setup                         build the environments and download the models (needs internet)
+  ./round0 check                         check the models are exactly ours (compares checkpoint_hashes.json)
+  ./round0 test                          check everything works (run on the GPU machine)
+
+Running:
+  ./round0 run <stages> <clips folder>   start a new run with settings.yaml (1 audio sample per clip)
+  ./round0 run-eval <stages> <clips>     start a new run with settings_eval.yaml (10 audio samples per clip)
+  ./round0 resume <stages> latest        continue the latest run (or give a run id instead of latest)
+  ./round0 status latest                 show how far the latest run got, and its last errors
+
+  <stages> is all, or a comma-separated list of: transcribe, describe, generate
+
+A machine without internet:
+  ./round0 pack <folder>                 pack the environments into <folder> (on the machine with internet)
+  ./round0 unpack <folder>               unpack them on the machine without internet
+
+For the authors:
+  ./round0 freeze                        write checkpoint_hashes.json from the downloaded models
+  ./round0 package <zip file>            make the submission zip (leaves out paths.yaml and anything personal)
+EOF
+}
+
+needs() {   # needs <count> <usage line> <arguments...>: stop unless exactly <count> arguments were given
+    local count="$1" usage_line="$2"
+    shift 2
+    if [ "$#" -ne "$count" ]; then
+        echo "usage: $usage_line" >&2
+        exit 1
+    fi
+}
+
+if [ "$#" -eq 0 ]; then
+    usage
+    exit 0
+fi
+command="$1"
+shift
+
+case "$command" in
+    setup)
+        needs 0 "./round0 setup" "$@"
+        exec bash "$COMMANDS/setup.sh" ;;
+    test)
+        needs 0 "./round0 test" "$@"
+        exec bash "$COMMANDS/test.sh" ;;
+    pack)
+        exec bash "$COMMANDS/pack.sh" "$@" ;;
+    unpack)
+        exec bash "$COMMANDS/unpack.sh" "$@" ;;
+    check|freeze|package|run|run-eval|resume|status)
+        source "$COMMANDS/common.sh"
+        require_environments
+        cd "$CODE_DIR"
+        case "$command" in
+            check)
+                needs 0 "./round0 check" "$@"
+                [ -f "$HASHES_FILE" ] || fail "$HASHES_FILE is missing."
+                exec "$ASR_CAPTIONER_PYTHON" -m scripts.hash_checkpoints --settings "$SETTINGS_FILE" --paths "$PATHS_FILE" --check "$HASHES_FILE" ;;
+            freeze)
+                needs 0 "./round0 freeze" "$@"
+                exec "$ASR_CAPTIONER_PYTHON" -m scripts.hash_checkpoints --settings "$SETTINGS_FILE" --paths "$PATHS_FILE" --write "$HASHES_FILE" ;;
+            package)
+                needs 1 "./round0 package <zip file>" "$@"
+                exec "$ASR_CAPTIONER_PYTHON" -m scripts.package "$(cd "$CALLER_DIR" && realpath -m "$1")" ;;
+            run|run-eval)
+                needs 2 "./round0 $command <stages> <clips folder>" "$@"
+                settings="$SETTINGS_FILE"
+                [ "$command" = run-eval ] && settings="$EVAL_SETTINGS_FILE"
+                clips="$(cd "$CALLER_DIR" && realpath -m "$2")"
+                [ -d "$clips" ] || fail "no such folder: $2"
+                exec "$ASR_CAPTIONER_PYTHON" -m scripts.run new --stages "$1" --settings "$settings" --paths "$PATHS_FILE" --clips "$clips" ;;
+            resume)
+                needs 2 "./round0 resume <stages> <run id, or latest>" "$@"
+                exec "$ASR_CAPTIONER_PYTHON" -m scripts.run resume --stages "$1" --run "$2" --paths "$PATHS_FILE" ;;
+            status)
+                needs 1 "./round0 status <run id, or latest>" "$@"
+                exec "$ASR_CAPTIONER_PYTHON" -m scripts.run status --run "$1" --paths "$PATHS_FILE" ;;
+        esac ;;
+    help|-h|--help)
+        usage ;;
+    *)
+        echo "Unknown command: $command" >&2
+        echo >&2
+        usage >&2
+        exit 1 ;;
+esac

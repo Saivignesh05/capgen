@@ -2,10 +2,14 @@
 
 Run from the code folder with the asr-captioner environment's Python:
 
-    python -m scripts.run new --stages transcribe,describe,generate --settings ../settings.yaml --clips /path/to/devset --runs /path/to/runs --environments /path/to/envs
-    python -m scripts.run resume --stages transcribe,describe,generate --run latest --runs /path/to/runs --environments /path/to/envs
+Usually started by ./round0 (run, resume, status). On its own, from the code folder:
 
---stages picks which stages run; a run can do some stages now and the rest later with resume.
+    python -m scripts.run new --stages all --settings ../settings.yaml --paths ../paths.yaml --clips /path/to/devset
+    python -m scripts.run resume --stages all --run latest --paths ../paths.yaml
+    python -m scripts.run status --run latest --paths ../paths.yaml
+
+--stages picks which stages run ("all", or a comma-separated list); a run can do some stages now
+and the rest later with resume. paths.yaml says where runs and environments are on this machine.
 
 Every new run gets its own folder, <runs>/<run_id>/:
 
@@ -33,8 +37,8 @@ import subprocess
 import sys
 
 from pipeline.seeds import sample_seed
-from pipeline.settings import load_settings, model_folder
-from scripts.records import (AudioRecord, ClipRecord, DescriptionRecord, GenerationTask, TranscriptRecord,
+from pipeline.settings import Paths, load_paths, load_settings, model_folder
+from scripts.records import (AudioRecord, ClipRecord, DescriptionRecord, ErrorRecord, GenerationTask, TranscriptRecord,
                              read_records, write_records)
 
 CODE_FOLDER = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -175,19 +179,52 @@ def new_run(settings_path: str, clips_folder: str, runs_folder: str) -> str:
     return run_folder
 
 
+def find_run(run: str, runs_folder: str) -> str:
+    """The folder of a run, by id or "latest"."""
+    if run == "latest":
+        latest = os.path.join(runs_folder, "latest.json")
+        if not os.path.isfile(latest):
+            raise SystemExit(f"No runs yet in {runs_folder}.")
+        run = read_json(latest)["run_id"]
+    run_folder = os.path.join(runs_folder, run)
+    if not os.path.isfile(os.path.join(run_folder, "run.json")):
+        raise SystemExit(f"No run called {run} in {runs_folder}.")
+    return run_folder
+
+
 def existing_run(run: str, runs_folder: str) -> str:
-    run_id = read_json(os.path.join(runs_folder, "latest.json"))["run_id"] if run == "latest" else run
-    run_folder = os.path.join(runs_folder, run_id)
+    run_folder = find_run(run, runs_folder)
     recorded = read_json(os.path.join(run_folder, "run.json"))
     current = lineage(run_folder)
     for key in FROZEN_KEYS:
         if recorded[key] != current[key]:
-            raise SystemExit(f"Cannot resume {run_id}: its {key} has changed since it started. Start a new run instead.")
-    print(f"== Resuming run {run_id}")
+            raise SystemExit(f"Cannot resume {recorded['run_id']}: its {key} has changed since it started. Start a new run instead.")
+    print(f"== Resuming run {recorded['run_id']}")
     return run_folder
 
 
-def run_stage(stage: str, tasks: list, run_folder: str, output_file: str, environments_folder: str, extra_environment: dict) -> None:
+def show_status(run_folder: str) -> None:
+    """Print where a run is, how far it got, and its most recent failures."""
+    run_json = read_json(os.path.join(run_folder, "run.json"))
+    print(f"Run:      {run_json['run_id']}")
+    print(f"Folder:   {run_folder}")
+    print(f"Clips:    {run_json['clip_count']} from {run_json['clips_folder']}")
+    if not run_json["attempts"]:
+        print("Attempts: none finished yet")
+        return
+    last = run_json["attempts"][-1]
+    print(f"Attempts: {len(run_json['attempts'])}, the last finished {last['finished']} ({', '.join(last['stages'])})")
+    print(f"Progress: transcripts {last['transcripts']}, descriptions {last['descriptions']}, audio samples {last['audio_samples']}, no-speech clips {last['no_speech_clips']}")
+    print(f"State:    {'complete' if last['complete'] else 'incomplete: resume it to finish'}")
+    errors = read_records(os.path.join(run_folder, "errors.jsonl"), ErrorRecord)
+    if errors:
+        print(f"Errors:   {len(errors)} in total; the last ones:")
+        for error in errors[-5:]:
+            sample = f" #{error.sample}" if error.sample is not None else ""
+            print(f"  [{error.stage}] {error.clip_id}{sample}: {error.error[:150]}")
+
+
+def run_stage(stage: str, tasks: list, run_folder: str, output_file: str, paths: Paths, paths_path: str, extra_environment: dict) -> None:
     """Give a stage its tasks and run it in its environment's Python. A crash stops the runner. CAREFUL R4"""
     if not tasks:
         print(f"== {stage}: nothing to do")
@@ -195,10 +232,11 @@ def run_stage(stage: str, tasks: list, run_folder: str, output_file: str, enviro
     print(f"== {stage}: {len(tasks)} to do")
     tasks_path = os.path.join(run_folder, f"tasks_{stage}.jsonl")
     write_records(tasks_path, tasks)
-    python = os.path.join(environments_folder, STAGE_ENVIRONMENT[stage], "bin", "python")
+    python = os.path.join(paths.environments, STAGE_ENVIRONMENT[stage], "bin", "python")
     subprocess.run(
         [python, "-m", f"scripts.stages.{stage}",
          "--settings", os.path.join(run_folder, "settings.yaml"),
+         "--paths", os.path.abspath(paths_path),
          "--tasks", tasks_path,
          "--output", os.path.join(run_folder, output_file),
          "--errors", os.path.join(run_folder, "errors.jsonl")],
@@ -207,17 +245,20 @@ def run_stage(stage: str, tasks: list, run_folder: str, output_file: str, enviro
 
 
 def parse_stages(text: str) -> list[str]:
-    """"transcribe,describe" -> ["transcribe", "describe"], always in pipeline order. CAREFUL R5"""
+    """"all" -> every stage; "describe,transcribe" -> ["transcribe", "describe"]: always in pipeline order. CAREFUL R5"""
+    if text.strip() == "all":
+        return list(STAGE_ENVIRONMENT)
     names = [name.strip() for name in text.split(",") if name.strip()]
     unknown = [name for name in names if name not in STAGE_ENVIRONMENT]
     if unknown or not names:
-        raise argparse.ArgumentTypeError(f"stages must be a comma-separated list of {', '.join(STAGE_ENVIRONMENT)}; got: {text}")
+        raise argparse.ArgumentTypeError(f"stages must be all, or a comma-separated list of {', '.join(STAGE_ENVIRONMENT)}; got: {text}")
     return [name for name in STAGE_ENVIRONMENT if name in names]
 
 
-def run_stages(run_folder: str, environments_folder: str, stages: list[str]) -> bool:
+def run_stages(run_folder: str, paths_path: str, stages: list[str]) -> bool:
     """Do whatever is missing in the chosen stages; record the attempt in run.json. True if they are all done."""
     settings = load_settings(os.path.join(run_folder, "settings.yaml"))
+    paths = load_paths(paths_path)
     clips = read_records(os.path.join(run_folder, "clips.jsonl"), ClipRecord)
     transcripts_path = os.path.join(run_folder, "transcripts.jsonl")
     descriptions_path = os.path.join(run_folder, "descriptions.jsonl")
@@ -226,17 +267,17 @@ def run_stages(run_folder: str, environments_folder: str, stages: list[str]) -> 
 
     if "transcribe" in stages:
         # The ASR's code ships inside its model folder, so its stage needs that folder on PYTHONPATH.
-        asr_folder = model_folder(settings, settings.downloads.asr)
+        asr_folder = model_folder(paths, settings.downloads.asr)
         run_stage("transcribe", missing_clips(clips, read_records(transcripts_path, TranscriptRecord)),
-                  run_folder, "transcripts.jsonl", environments_folder, {"PYTHONPATH": asr_folder})
+                  run_folder, "transcripts.jsonl", paths, paths_path, {"PYTHONPATH": asr_folder})
     if "describe" in stages:
         run_stage("describe", missing_clips(clips, read_records(descriptions_path, DescriptionRecord)),
-                  run_folder, "descriptions.jsonl", environments_folder, {})
+                  run_folder, "descriptions.jsonl", paths, paths_path, {})
     if "generate" in stages:
         run_stage("generate", generation_tasks(clips, read_records(transcripts_path, TranscriptRecord),
                                                read_records(descriptions_path, DescriptionRecord), read_records(audio_path, AudioRecord),
                                                settings.generation.samples_per_item, settings.generation.seed),
-                  run_folder, "audio.jsonl", environments_folder, {})
+                  run_folder, "audio.jsonl", paths, paths_path, {})
 
     transcripts = read_records(transcripts_path, TranscriptRecord)
     descriptions = read_records(descriptions_path, DescriptionRecord)
@@ -267,22 +308,29 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest="command", required=True)
     new = commands.add_parser("new", help="start a new run")
-    new.add_argument("--settings", required=True, help="path to settings.yaml")
+    new.add_argument("--settings", required=True, help="path to settings.yaml or settings_eval.yaml")
     new.add_argument("--clips", required=True, help="folder searched recursively for .wav files")
     resume = commands.add_parser("resume", help="continue a run")
-    resume.add_argument("--run", required=True, help='a run id, or "latest"')
+    status = commands.add_parser("status", help="show how far a run got")
+    for command in [resume, status]:
+        command.add_argument("--run", required=True, help='a run id, or "latest"')
     for command in [new, resume]:
-        command.add_argument("--runs", required=True, help="folder that holds every run")
-        command.add_argument("--environments", required=True, help="folder that holds the asr-captioner and generator environments")
         command.add_argument("--stages", required=True, type=parse_stages,
-                             help='which stages to run, comma-separated: "transcribe,describe,generate" for all')
+                             help='"all", or a comma-separated list of transcribe, describe, generate')
+    for command in [new, resume, status]:
+        command.add_argument("--paths", required=True, help="path to paths.yaml")
     args = parser.parse_args()
 
+    paths = load_paths(args.paths)
+    os.makedirs(paths.runs, exist_ok=True)
+    if args.command == "status":
+        show_status(find_run(args.run, paths.runs))
+        return
     if args.command == "new":
-        run_folder = new_run(args.settings, args.clips, args.runs)
+        run_folder = new_run(args.settings, args.clips, paths.runs)
     else:
-        run_folder = existing_run(args.run, args.runs)
-    complete = run_stages(run_folder, args.environments, args.stages)
+        run_folder = existing_run(args.run, paths.runs)
+    complete = run_stages(run_folder, args.paths, args.stages)
     sys.exit(0 if complete else 1)
 
 

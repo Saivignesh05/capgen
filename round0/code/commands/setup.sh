@@ -28,7 +28,7 @@ build_env() {   # build_env <environment>
         "$env/bin/python" -m pip install --no-deps -r "$(lock_file "$name")" --extra-index-url "$TORCH_INDEX_URL"
     else
         echo "== Installing the packages of $name (first build)"
-        "$env/bin/python" -m pip install torch torchaudio --index-url "$TORCH_INDEX_URL"        # torch first. CAREFUL E2
+        "$env/bin/python" -m pip install torch torchaudio torchvision --index-url "$TORCH_INDEX_URL"        # torch first. CAREFUL E2
         "$env/bin/python" -m pip install -r "$ENVIRONMENT_DEFINITIONS/$name/requirements.txt"
         local overrides="$ENVIRONMENT_DEFINITIONS/$name/requirements-overrides.txt"
         if [ -f "$overrides" ]; then        # CAREFUL E3

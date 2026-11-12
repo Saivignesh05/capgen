@@ -1,18 +1,20 @@
 # Python packages for the "asr-captioner" environment.
 #
-# torch is NOT listed: scripts/setup_envs.sh installs it first, from the PyTorch index for the
-# CUDA version the cluster supports.
+# torch, torchaudio and torchvision are NOT listed: ./round0 setup installs them first, from the
+# PyTorch index in environments/torch-index.txt, so their CUDA builds match. torchvision is needed
+# because the Qwen3-Omni processor also loads a video processor, even for audio only.
 #
 # Qwen3-Omni was added in transformers 4.57.0, and the code passes `dtype=` (4.56 or newer).
 # The generator cannot share this environment: see environments/generator/requirements.txt.
 #
 # The ASR's own requirements (requirements.txt inside its model folder) are added by
-# scripts/setup_envs.sh, with the versions here kept fixed.
+# ./round0 setup, with the versions here kept fixed.
 #
 # Exact versions of everything installed are recorded in requirements.lock.txt after building.
 
 transformers==4.57.6
 accelerate              # needed for device_map="auto"
+pillow                  # the Qwen3-Omni processor loads an image processor, which needs it, even for audio only
 huggingface_hub
 pydantic>=2
 pyyaml

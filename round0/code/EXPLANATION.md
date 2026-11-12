@@ -9,9 +9,12 @@ round0/
 ├── README.md                   how to reproduce the results
 ├── settings.yaml               every setting and value, for devset runs
 ├── settings_eval.yaml          the same, with 10 samples per description for the evaluation outputs
+├── paths.yaml                  where the environments and runs are on this machine (not part of the results)
 ├── checkpoint_hashes.json      SHA-256 of every model checkpoint (written by scripts/hash_checkpoints.py)
 └── code/
     ├── EXPLANATION.md          this file
+    ├── run.sh                  the short way to run the pipeline (reads ../paths.yaml)
+    ├── test.sh                 runs every test in the right environment (reads ../paths.yaml)
     ├── pipeline/               the Python package
     │   ├── audio_types.py      shared inputs and outputs
     │   ├── settings.py         the classes that check settings.yaml, and load_settings()
@@ -65,6 +68,17 @@ clips ──► transcribe (ASR) ──────► transcripts.jsonl ──�
 
 All bookkeeping lives in the runner. The stages know nothing about runs: each gets a list of tasks, does them, and appends one line per result to its output file (or one line per failure to `errors.jsonl`). The runner decides what each stage still has to do by reading what is already in the output files.
 
+### Starting it
+
+`code/run.sh` is the short way: it reads the environments and runs folders from `paths.yaml` and passes them to `scripts/run.py`, so only what changes between runs is typed:
+
+```bash
+code/run.sh new --stages transcribe,describe,generate --settings settings.yaml --clips /path/to/devset
+code/run.sh resume --stages describe,generate --run latest
+```
+
+`paths.yaml` holds machine-specific folders only. It is deliberately separate from `settings.yaml`, which describes the results and is copied into every run.
+
 ### Runs
 
 Every `new` run gets its own folder, `<runs>/<run_id>/`, and `<runs>/latest.json` names the newest one:
@@ -92,7 +106,9 @@ Every output line is keyed by `clip_id`, so any audio file traces back to its se
 
 ### Resuming
 
-`resume --run latest` (or a run id) does only what is missing: clips with no transcript or description yet, and samples not yet written. Failed clips are tried again; finished ones are never redone. A run is resumed only if its code commit, settings and lock files are unchanged since it started, so all of a run's outputs come from one setup. If anything changed, start a new run.
+`--stages` (required for both `new` and `resume`) picks which stages run, so a run can do some stages now and the rest later; stages always run in pipeline order, and each attempt's stages are recorded in `run.json`.
+
+`resume --run latest` (or a run id) does only what is missing in the chosen stages: clips with no transcript or description yet, and samples not yet written. Failed clips are tried again; finished ones are never redone. A run is resumed only if its code commit, settings and lock files are unchanged since it started, so all of a run's outputs come from one setup. If anything changed, start a new run.
 
 If a stage crashes outright (out of memory, a killed job), the runner stops. Each stage has already written every result it finished, so resuming continues from there.
 

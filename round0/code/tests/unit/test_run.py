@@ -1,11 +1,13 @@
-"""The runner's planning: which clips and samples are still to do. No models needed."""
+"""The runner's planning: which stages, clips and samples are still to do. No models needed."""
+import argparse
+
 import pytest
 
 pytest.importorskip("soundfile")        # scripts.records imports pipeline.audio_types
 
 from pipeline.seeds import sample_seed
 from scripts.records import AudioRecord, ClipRecord, DescriptionRecord, TranscriptRecord
-from scripts.run import find_clips, generation_tasks, missing_clips
+from scripts.run import find_clips, generation_tasks, missing_clips, parse_stages
 
 
 def clip(clip_id: str) -> ClipRecord:
@@ -62,3 +64,13 @@ def test_samples_already_written_are_not_made_again_and_keep_their_seed():
     done = [AudioRecord(clip_id="a", sample=0, seed=sample_seed(7, "a", 0), file="audio/a/0.wav")]
     tasks = generation_tasks(clips, transcripts, descriptions, done, samples_per_item=2, base_seed=7)
     assert [(t.sample, t.seed) for t in tasks] == [(1, sample_seed(7, "a", 1))]
+
+
+def test_stages_are_put_in_pipeline_order():
+    assert parse_stages("generate,transcribe") == ["transcribe", "generate"]
+
+
+def test_unknown_or_empty_stages_are_rejected():
+    for text in ["transcribe,translate", ""]:
+        with pytest.raises(argparse.ArgumentTypeError):
+            parse_stages(text)

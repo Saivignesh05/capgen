@@ -1,0 +1,9 @@
+# Folders on this machine, used by code/run.sh and code/test.sh so you do not have to type them.
+# Not part of the results: change them freely. Absolute paths only (starting with /).
+
+# Folder that holds the asr-captioner and generator environments.
+# On the machine that built them, this is the output of: echo "$(conda info --base)/envs"
+environments: /path/to/conda/envs
+
+# Folder that holds every run. Created if missing.
+runs: /path/to/runs

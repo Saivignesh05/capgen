@@ -2,8 +2,10 @@
 
 Run from the code folder with the asr-captioner environment's Python:
 
-    python -m scripts.run new --settings ../settings.yaml --clips /path/to/devset --runs /path/to/runs --environments /path/to/envs
-    python -m scripts.run resume --run latest --runs /path/to/runs --environments /path/to/envs
+    python -m scripts.run new --stages transcribe,describe,generate --settings ../settings.yaml --clips /path/to/devset --runs /path/to/runs --environments /path/to/envs
+    python -m scripts.run resume --stages transcribe,describe,generate --run latest --runs /path/to/runs --environments /path/to/envs
+
+--stages picks which stages run; a run can do some stages now and the rest later with resume.
 
 Every new run gets its own folder, <runs>/<run_id>/:
 
@@ -204,44 +206,60 @@ def run_stage(stage: str, tasks: list, run_folder: str, output_file: str, enviro
     os.remove(tasks_path)
 
 
-def run_stages(run_folder: str, environments_folder: str) -> bool:
-    """Do whatever is missing in the run; record the attempt in run.json. True if the run is complete."""
+def parse_stages(text: str) -> list[str]:
+    """"transcribe,describe" -> ["transcribe", "describe"], always in pipeline order. CAREFUL R5"""
+    names = [name.strip() for name in text.split(",") if name.strip()]
+    unknown = [name for name in names if name not in STAGE_ENVIRONMENT]
+    if unknown or not names:
+        raise argparse.ArgumentTypeError(f"stages must be a comma-separated list of {', '.join(STAGE_ENVIRONMENT)}; got: {text}")
+    return [name for name in STAGE_ENVIRONMENT if name in names]
+
+
+def run_stages(run_folder: str, environments_folder: str, stages: list[str]) -> bool:
+    """Do whatever is missing in the chosen stages; record the attempt in run.json. True if they are all done."""
     settings = load_settings(os.path.join(run_folder, "settings.yaml"))
     clips = read_records(os.path.join(run_folder, "clips.jsonl"), ClipRecord)
     transcripts_path = os.path.join(run_folder, "transcripts.jsonl")
     descriptions_path = os.path.join(run_folder, "descriptions.jsonl")
     audio_path = os.path.join(run_folder, "audio.jsonl")
-    attempt = {"started": now(), "gpus": gpus()}
+    attempt = {"started": now(), "stages": stages, "gpus": gpus()}
 
-    # The ASR's code ships inside its model folder, so its stage needs that folder on PYTHONPATH.
-    asr_folder = model_folder(settings, settings.downloads.asr)
-    run_stage("transcribe", missing_clips(clips, read_records(transcripts_path, TranscriptRecord)),
-              run_folder, "transcripts.jsonl", environments_folder, {"PYTHONPATH": asr_folder})
-    run_stage("describe", missing_clips(clips, read_records(descriptions_path, DescriptionRecord)),
-              run_folder, "descriptions.jsonl", environments_folder, {})
+    if "transcribe" in stages:
+        # The ASR's code ships inside its model folder, so its stage needs that folder on PYTHONPATH.
+        asr_folder = model_folder(settings, settings.downloads.asr)
+        run_stage("transcribe", missing_clips(clips, read_records(transcripts_path, TranscriptRecord)),
+                  run_folder, "transcripts.jsonl", environments_folder, {"PYTHONPATH": asr_folder})
+    if "describe" in stages:
+        run_stage("describe", missing_clips(clips, read_records(descriptions_path, DescriptionRecord)),
+                  run_folder, "descriptions.jsonl", environments_folder, {})
+    if "generate" in stages:
+        run_stage("generate", generation_tasks(clips, read_records(transcripts_path, TranscriptRecord),
+                                               read_records(descriptions_path, DescriptionRecord), read_records(audio_path, AudioRecord),
+                                               settings.generation.samples_per_item, settings.generation.seed),
+                  run_folder, "audio.jsonl", environments_folder, {})
 
     transcripts = read_records(transcripts_path, TranscriptRecord)
     descriptions = read_records(descriptions_path, DescriptionRecord)
-    run_stage("generate", generation_tasks(clips, transcripts, descriptions, read_records(audio_path, AudioRecord),
-                                           settings.generation.samples_per_item, settings.generation.seed),
-              run_folder, "audio.jsonl", environments_folder, {})
-
+    audio = read_records(audio_path, AudioRecord)
     no_speech = sum(1 for record in transcripts if record.transcript == "")
-    speakable = len(transcripts) - no_speech
     summary = {
         "transcripts": f"{len(transcripts)}/{len(clips)}",
         "descriptions": f"{len(descriptions)}/{len(clips)}",
-        "audio_samples": f"{len(read_records(audio_path, AudioRecord))}/{speakable * settings.generation.samples_per_item}",
+        "audio_samples": f"{len(audio)}/{(len(transcripts) - no_speech) * settings.generation.samples_per_item}",
         "no_speech_clips": no_speech,
     }
-    missing_generation = generation_tasks(clips, transcripts, descriptions, read_records(audio_path, AudioRecord),
-                                          settings.generation.samples_per_item, settings.generation.seed)
-    complete = len(transcripts) == len(clips) and len(descriptions) == len(clips) and not missing_generation
+    done = {
+        "transcribe": len(transcripts) == len(clips),
+        "describe": len(descriptions) == len(clips),
+    }
+    done["generate"] = done["transcribe"] and done["describe"] and not generation_tasks(
+        clips, transcripts, descriptions, audio, settings.generation.samples_per_item, settings.generation.seed)
+    complete = all(done[stage] for stage in stages)
 
     run_json = read_json(os.path.join(run_folder, "run.json"))
     run_json["attempts"].append({**attempt, "finished": now(), "complete": complete, **summary})
     write_json(os.path.join(run_folder, "run.json"), run_json)
-    print(f"== {'Complete' if complete else 'Incomplete (see errors.jsonl, then resume)'}: {summary}")
+    print(f"== {'Complete' if complete else 'Incomplete (see errors.jsonl, then resume)'} for {', '.join(stages)}: {summary}")
     return complete
 
 
@@ -256,13 +274,15 @@ def main() -> None:
     for command in [new, resume]:
         command.add_argument("--runs", required=True, help="folder that holds every run")
         command.add_argument("--environments", required=True, help="folder that holds the asr-captioner and generator environments")
+        command.add_argument("--stages", required=True, type=parse_stages,
+                             help='which stages to run, comma-separated: "transcribe,describe,generate" for all')
     args = parser.parse_args()
 
     if args.command == "new":
         run_folder = new_run(args.settings, args.clips, args.runs)
     else:
         run_folder = existing_run(args.run, args.runs)
-    complete = run_stages(run_folder, args.environments)
+    complete = run_stages(run_folder, args.environments, args.stages)
     sys.exit(0 if complete else 1)
 
 
@@ -287,4 +307,8 @@ if __name__ == "__main__":
 #      as incomplete. If a stage itself crashes (out of memory, killed job), the runner stops;
 #      resume continues from the last line each stage wrote. Generated audio is 16-bit WAV at the
 #      model's own sample rate (44.1 kHz for Indic Parler-TTS; the competition asks 24 kHz or more).
+# R5   --stages is required, so a run never does more or less than asked. Stages always run in
+#      pipeline order whatever order they are given in. Each stage works on the whole run: run
+#      only transcribe now, then resume with describe,generate later. generate only speaks clips
+#      that already have both a transcript and a description.
 # ---------------------------------------------------------------------------------------------

@@ -1,0 +1,7 @@
+# Copy this file to paths.yaml (in the same folder) and edit paths.yaml: the folders on your machine.
+# paths.yaml is personal to your machine; it is not part of the code and is never packaged.
+# Use full paths, starting with /. The folders are created if they do not exist.
+
+models: /absolute/path/to/models              # the downloaded models, about 75 GB
+environments: /absolute/path/to/environments  # the two Python environments, about 20 GB
+runs: /absolute/path/to/runs                  # the results of every run

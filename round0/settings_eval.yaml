@@ -1,11 +1,6 @@
-# Round 0 settings for the evaluation outputs. Identical to settings.yaml except for
-# generation.samples_per_item (a test checks this).
-# Every value here is used; nothing in the code has a default.
-# Checked by code/pipeline/settings.py: unknown or misspelled keys are errors.
-
-# Folder that holds every model, each in model_dir/<repo_id>. Set this first.
-# It must be an absolute path (starting with /) to a folder that exists.
-model_dir: /path/to/models
+# Round 0 settings for the evaluation outputs: 10 audio samples per clip.
+# Identical to settings.yaml except for generation.samples_per_item (a test checks this).
+# Do not change these values: they define the results. Folders on your machine go in paths.yaml.
 
 # Hugging Face repos, each pinned to an exact commit.
 downloads:

@@ -1,0 +1,16 @@
+# Your machine's folders: personal, never committed or packaged (copy paths.example.yaml to make it)
+paths.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Packed environments (made by ./round0 pack; large)
+*.tar.gz
+
+# Speech clips for the optional ASR tests (add your own; not committed)
+code/tests/data/*.wav
+
+# Half-written files from an interrupted run or lock write
+*.partial

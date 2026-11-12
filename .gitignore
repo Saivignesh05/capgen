@@ -238,3 +238,6 @@ packed-envs/
 runs/
 old_round0_code/
 
+round0.zip
+models.zip
+packed-envs.zip

@@ -241,3 +241,5 @@ old_round0_code/
 round0.zip
 models.zip
 packed-envs.zip
+
+round0/paths.yaml

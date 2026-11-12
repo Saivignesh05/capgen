@@ -17,7 +17,7 @@ import sys
 from pipeline.settings import load_settings, model_folder
 from scripts.download import MARKER_NAME
 
-SKIPPED_FOLDERS = {".cache"}        # Hugging Face's download bookkeeping, not part of the checkpoint. CAREFUL H1
+SKIPPED_FOLDERS = {".cache", "__pycache__"}     # download bookkeeping and Python bytecode, not part of the checkpoint. CAREFUL H1, H2
 CHUNK_BYTES = 64 * 1024 * 1024
 
 
@@ -93,4 +93,7 @@ if __name__ == "__main__":
 # H1   Hugging Face keeps download bookkeeping in a .cache folder inside each model folder, and
 #      download.py writes its own marker. Neither is part of the model, and both can differ
 #      between machines, so neither is hashed.
+# H2   The ASR's code runs from inside its model folder (it is put on PYTHONPATH), so Python writes
+#      __pycache__ folders there the first time the ASR is imported. They are not part of the
+#      checkpoint, and without skipping them --check fails after any run or test.
 # ---------------------------------------------------------------------------------------------

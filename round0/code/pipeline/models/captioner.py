@@ -52,7 +52,7 @@ class Captioner(CaptionerInterface):
             padding=True)
         inputs = inputs.to(self.model.device).to(self.model.dtype)     # casts only float tensors; input_ids stay integers
 
-        output = self.model.generate(
+        thinker_output, _audio = self.model.generate(      # returns (text, audio); audio is None here. CAREFUL C10
             **inputs,
             return_audio=False,
             thinker_return_dict_in_generate=True,
@@ -60,7 +60,7 @@ class Captioner(CaptionerInterface):
             thinker_do_sample=False)        # no sampling so no randomness. CAREFUL C8, C9
 
         # Keep only the generated tokens, not the prompt. [0]: one clip per call.
-        new_tokens = output.sequences[:, inputs["input_ids"].shape[1]:]
+        new_tokens = thinker_output.sequences[:, inputs["input_ids"].shape[1]:]
         text = self.processor.batch_decode(
             new_tokens,
             skip_special_tokens=True,
@@ -86,4 +86,7 @@ class Captioner(CaptionerInterface):
 # C9   Short descriptions are fine: the model emits an end token and stops. Rarely, greedy decoding never
 #      emits it and repeats a phrase until max_new_tokens. A description that used all max_new_tokens
 #      is the sign to check for this (or for C3).
+# C10  Qwen3OmniMoeForConditionalGeneration.generate always returns a tuple (thinker output, audio),
+#      even with return_audio=False, when the audio is None (transformers 4.57). Unpack it before
+#      reading .sequences, or every clip fails with AttributeError.
 # ---------------------------------------------------------------------------------------------

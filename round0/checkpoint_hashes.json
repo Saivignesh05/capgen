@@ -1,0 +1,98 @@
+{
+  "captioner": {
+    "repo_id": "Qwen/Qwen3-Omni-30B-A3B-Captioner",
+    "revision": "a2bd106cbf527db5676e79662674da22b0545ec0",
+    "sha256": "228d2d6dd24cbacaf33813b3117dd9c5e81ad02d22304c4562896f3b5055f6e8",
+    "files": {
+      ".gitattributes": "11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361",
+      "README.md": "5561afcbfa9eded1e96d86bf6f47062c57faf20e95ab68d2c66ddd9ff6d2b0bc",
+      "chat_template.json": "3afb9519448b62e252cefeed1c0c1939b01b4e8ed70adbaf3c9f952969aa0ec7",
+      "config.json": "e6f8c637528461398ef4e11d48b6112ce73db2458a563dfea548127c2cce253f",
+      "generation_config.json": "399218e58e26b42d0856fb6624fe6f54a01c212682adb6442c06c875a2b200fb",
+      "merges.txt": "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3",
+      "model-00001-of-00016.safetensors": "7f2e8477f5e8aef9163d7b46ead3e955bf13fec2826092990bc1df434cba67af",
+      "model-00002-of-00016.safetensors": "1eea7a21447ac311636eeb8b2a8f4a10fbe8e1dbb85870432081a0785715c820",
+      "model-00003-of-00016.safetensors": "95465568b11da26b96dbf873c785baec9b371b07d1eaee7516bf0b97ca4d8b8d",
+      "model-00004-of-00016.safetensors": "b6b237e045ab59f8038c8b31fb2d311ef3063101adf90656f1ab931f6c082f87",
+      "model-00005-of-00016.safetensors": "ca7c8c1000c27533a7a1142f6249119539e39964056d67f1bbc889c56e7b7365",
+      "model-00006-of-00016.safetensors": "9f292ccd339bb83d5282ea8d941a77d7a8a8e12ba721a711b6691a2e9156cdbd",
+      "model-00007-of-00016.safetensors": "628f156bc9f4bfa57095dd91b21e2fdf16856d67d249eeb722915f40e1821e8d",
+      "model-00008-of-00016.safetensors": "461eeda21222c8f69c4bc7ebc6e977ad776f7350f92c0b440de9149b1452b27c",
+      "model-00009-of-00016.safetensors": "40e7baf316bbfbf5ca007847402f9435ce985bb2893e25e33bd9bb7972aee3f3",
+      "model-00010-of-00016.safetensors": "9c8bd10a2f8d6c5c504f50ec6a1bfbfb311757ce226e600775ac6511c6589bbb",
+      "model-00011-of-00016.safetensors": "b86e1441bdc73585b1e958535aa58a39c96b60ffb1a4af88bdb344df8b678ac8",
+      "model-00012-of-00016.safetensors": "39ae0c5e0073778cc6ac487e8056d803696aa9045738e7e9339e1197b37ba0f7",
+      "model-00013-of-00016.safetensors": "80d775cad42794687b663d5c574b2ec851035e1a8fda81a61f9bec7dfb84cc86",
+      "model-00014-of-00016.safetensors": "c3195c7dda8c4f6033f5f2bc002d06e2f6eb8fad38fe73e92fe798715f42d03e",
+      "model-00015-of-00016.safetensors": "4b5049b50cfd5ef272dca6473b2451774a8828a93aeb37beaadbbe6b4c1f2e41",
+      "model-00016-of-00016.safetensors": "1fe9823d6d7edf67788970f1f9336cf88cf908dd62bdc26692795dbb4488bebe",
+      "model.safetensors.index.json": "282a41fa34d22e13753ae868ce12872ed48c14f32bfbe25b627e18844664afc4",
+      "preprocessor_config.json": "b10e27fd4542cf89ec7145942b87f3e65408d4e9f9d031a29acdd293c15fb3fc",
+      "tokenizer_config.json": "dc3c31c3bdaedd5016382bb3cbe07323026775ad51f5a4fb564505992ae4a670",
+      "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+    }
+  },
+  "asr": {
+    "repo_id": "bodhan-ai/indic-transcribe-core",
+    "revision": "e083ab7dfeeddcb5c0b4a2d7df53f53e7b0f1537",
+    "sha256": "ae615df24677c1139194c6c120362fb2b106887d8324907e0727ba5361ebba2b",
+    "files": {
+      ".gitattributes": "0a27708dbe49143c0f00813249fb329fd0672351a783d04fc162a29f93ec6d1c",
+      "Bodhan_AI_Open_Model_License.md": "b39f2a9cb2d5ace3a03f4425cbc6db38ebd9a53ab7a7648d67dc1e0998ad75c2",
+      "README.md": "23f423dcd43ce8f83e1bc2df96418fa083b5b9966d17ba49a8574476759efc7f",
+      "banner.png": "4e34bdbdfa712a158b0967711685c1e201f138a85eda9af478cd6f4568a0fedd",
+      "config.json": "0c4a21e4b492c8351bc7c2a5f134e9afab4ff88e0933b41cd90a4ddbbc8e02e7",
+      "configuration_indic_canary.py": "35ad5ee48d57655f19027619fedd0a8a95de4d79893a09b2439fac6fcbfb8e9c",
+      "feature_extraction_indic_canary.py": "4095b6262d16ace21a64ca39b5b82f23703af57d0e04f6c0b323c538c08df43c",
+      "feature_extractor.safetensors": "d937fed7f88a7ae26960be72ba4b79b7018d69e66805ba2a8c39909ba8f11a69",
+      "generation_config.json": "c4f8a41e1aaa29582d74bd8ad959ebca2ed5fd16e5081fa203624c65fcbb5ef0",
+      "indic-open-license.md": "5dd97d2327cdd4fc87e974528fee8bbe16420c1fed41f33778be58ab809386a0",
+      "indic_transcribe.py": "65f60828df8bfa33eca2f055e97dce62e0dd7f3a31cc04a3f870e239d5ce06ed",
+      "inference.py": "8d8c8ddf45f44a94a672837c5aa0cefcb7ebe660f2f8f2e776a6ddc660939419",
+      "lid.py": "553f9ad5c60966661fcfd6d1acec7c75e6891e0d0710cf940e37634a54b47017",
+      "long_form.py": "b58073279d1e690320f5c3a48a8acba7465610a4c5f4e1efe273b86e74df87e5",
+      "model.safetensors": "fcc2284a6e0154989743dc20b0232e4e285b770429f306029f01a661b9c6200c",
+      "modeling_indic_canary.py": "f5f5bd38517939b25d6e7d714c5cfde246dd3de7de7af9de5fb589217014cfa6",
+      "nemo/canary_multilingual_tokenizer.py": "3c89fad5fa0ae7ad4ff0e79b3c788a48398340cdae76082cc6d0641e3defb1ba",
+      "nemo/indic_transcribe_core.nemo": "461c0a74325e14009ebb6fd866dabc7e4c58cb472c397b932693bb5cf852150d",
+      "nemo/inference_nemo.py": "2f1d2a1768106ee74f23af7f36432fb172f0c5163681e719e82ab634895e065e",
+      "nemo/load_nemo.py": "166ef1fe04eec9da994a8679bffbe2d03bc007929c04ffe9116d5276bd8f39a7",
+      "nemo/long_form_nemo.py": "7454d4fbfd560f4fdc7bcac65f39514b4b0ad0510b8ef33ac6bca7ba2511ef3d",
+      "nemo/test_nemo.py": "3d8ec0f36acc4feed34548f63f9676fd7e329009467d9161162355f064de8e6d",
+      "requirements.txt": "38cd4909d82772cbfe556de4a04b2fc56fba2749c6d76537341dd40d01dd20ca",
+      "tokenization_indic_canary.py": "7dd544fb33112d16312be6093c388e4ea44e218bf4c751919b53ca733e92985e",
+      "tokenizer_config.json": "171cea93b631eeaaf468911568602ae9c917dc340de375573244e59fb3c79d3a",
+      "tokenizer_multilingual.model": "e6348e009ed49b6f57c460f7739ba078d9d13fdda0bed4960f0f0aa494b5974c",
+      "tokenizer_spl_tokens.model": "97bf0b161a6dcbb37c4ca7466b88249c0f0a7a031bcfae194590db38ee3c9dcb"
+    }
+  },
+  "generator": {
+    "repo_id": "ai4bharat/indic-parler-tts",
+    "revision": "660bc53c64ae83150613264111708a0465211237",
+    "sha256": "730b7c915b9e82936580aa17848023a77bdd4ad42e51849658db6751235c2a42",
+    "files": {
+      ".gitattributes": "11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361",
+      "README.md": "48f22f1d8db473abdcecdba448e24fef0fee26810beb38ccb3d4f1bff4b47652",
+      "config.json": "14b8b2352e854758fc2c6ad8bf72fb8330a8361cdcf79d7eb52a3f665e904cd2",
+      "generation_config.json": "86d035c0fd9589d60fb763aad1feafeee2040fb9cf51515a0144816cec4d029d",
+      "model.safetensors": "c68daecb60f80c8f1faf0a6d2e6ddd6de8e224fb19750f3e9a33bca43c552c90",
+      "preprocessor_config.json": "c7d295758ce5777d6d88fef1996e94adc8ef3e2237ddfc5ecc24d1407aaddd7d",
+      "special_tokens_map.json": "4859e5dbde90e059988a0a2136d8df3f2773d4d2fc4c4543690028f0b2166e7f",
+      "tokenizer.json": "8b5f3a5080f95e5333930b57181cd2a9bf387632bd7b277af5d4fea59acb58de",
+      "tokenizer.model": "bc8fa773221597d09cfadb23a2b1bd717488a0481505469ea56d42cb044de9b5",
+      "tokenizer_config.json": "47baa70cba964a32daa581a4af50b4f2c77edaa18bec2257660133ab204ca36f"
+    }
+  },
+  "description_tokenizer": {
+    "repo_id": "google/flan-t5-large",
+    "revision": "0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a",
+    "sha256": "4af6d51692031d39352f74c32634601fc9f8322e7d1980cb749f925e76a6f0c5",
+    "files": {
+      "config.json": "bfa5beeb5a4630a97f043f071b9b5d858c842604cff5db874680f33b56090c8c",
+      "special_tokens_map.json": "5c87151ef0f72a99d1f766a4c418bd2a1f90aaa30a8e22fe5eca9641daebb64f",
+      "spiece.model": "d60acb128cf7b7f2536e8f38a5b18a05535c9e14c7a355904270e15b0945ea86",
+      "tokenizer.json": "fe2ebbbbde2985be723e0ce18217853e4020c5e9d35bd07be2c27ab9d3ead57a",
+      "tokenizer_config.json": "5d19985330a9123285cc583fc60616d083aa9df7435812b5d8bb3e749f435d56"
+    }
+  }
+}

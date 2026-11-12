@@ -5,6 +5,10 @@
 #     bash scripts/setup_envs.sh <settings.yaml> <folder for packed environments> <PyTorch index URL>
 #     bash scripts/setup_envs.sh ../settings.yaml /path/to/packed-envs https://download.pytorch.org/whl/cu121
 #
+# On a cluster WITH internet, build directly where the jobs run and skip packing:
+#     PACK=0 bash scripts/setup_envs.sh ../settings.yaml - https://download.pytorch.org/whl/cu121
+# (the second argument is then ignored; the environments stay in conda's own envs folder).
+#
 # Safe to re-run: existing environments are reused, finished model downloads are skipped.
 # See the CAREFUL codes at the bottom.
 set -euo pipefail
@@ -15,14 +19,17 @@ if [ "$#" -ne 3 ]; then
     exit 1
 fi
 SETTINGS="$(realpath "$1")"
-PACKED_DIR="$(realpath -m "$2")"
+PACK="${PACK:-1}"          # PACK=0: no conda-pack (cluster with internet)
 TORCH_INDEX_URL="$3"        # CAREFUL E1
 CODE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENVIRONMENTS_DIR="$CODE_DIR/environments"
 
 command -v conda >/dev/null || { echo "conda not found" >&2; exit 1; }
-command -v conda-pack >/dev/null || { echo "conda-pack not found: conda install -n base -c conda-forge conda-pack" >&2; exit 1; }
-mkdir -p "$PACKED_DIR"
+if [ "$PACK" = "1" ]; then
+    PACKED_DIR="$(realpath -m "$2")"
+    command -v conda-pack >/dev/null || { echo "conda-pack not found: conda install -n base -c conda-forge conda-pack (or PACK=0 on a cluster with internet)" >&2; exit 1; }
+    mkdir -p "$PACKED_DIR"
+fi
 cd "$CODE_DIR"       # so `python -m scripts.download` and `import pipeline` work
 
 in_env() {      # in_env <environment> <command...>
@@ -93,11 +100,14 @@ for name in asr-captioner generator; do
 done
 
 # 6. Pack each environment into one file to copy to the cluster. CAREFUL E6
-for name in asr-captioner generator; do
-    conda-pack -n "$name" -o "$PACKED_DIR/$name.tar.gz" --force
-done
-
-echo "== Done. Copy $PACKED_DIR and the models folder to the cluster, then run scripts/unpack_envs.sh there."
+if [ "$PACK" = "1" ]; then
+    for name in asr-captioner generator; do
+        conda-pack -n "$name" -o "$PACKED_DIR/$name.tar.gz" --force
+    done
+    echo "== Done. Copy $PACKED_DIR and the models folder to the cluster, then run scripts/unpack_envs.sh there."
+else
+    echo "== Done (not packed, PACK=0). The environments are in: $(dirname "$(conda run -n asr-captioner python -c 'import sys; print(sys.prefix)')")"
+fi
 
 # ---------------------------------------------------------------------------------------------
 # CAREFUL codes

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# The whole midterm pipeline on the devset: round 0 (ASR -> captioner -> generator), then scoring,
-# then results.csv. Run on a GPU node (see slurm/run_midterm.sbatch):
+# ONE midterm run: round 0 (ASR -> captioner -> generator) on a folder of clips, then scoring, then
+# results.csv. Usually you do not call this yourself: submit slurm/run_midterm.sbatch, which calls it
+# once or twice depending on MODE (see Midterm-explanation.md, section 8). Run on a GPU node:
 #
 #     bash midterm/run_midterm.sh <envs folder> <runs folder>
 #

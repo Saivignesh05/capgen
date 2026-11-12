@@ -18,20 +18,22 @@ Audio input: every function takes `audio` and `sample_rate`.
 
 Requirements (all imported at the top, so they must be installed or on PYTHONPATH):
   torch, transformers, librosa, numpy
-  sigmos.py + its .onnx model (from microsoft/DNS-Challenge): put the folder on PYTHONPATH
+  sigmos.py + its .onnx model (from microsoft/SIG-Challenge, ICASSP2024/sigmos): put the folder on PYTHONPATH
   the psp-eval repo (folder containing evaluation/fad.py): put it on PYTHONPATH
 Do not name any of your own files evaluation.py or sigmos.py.
 
 Typical use
   scorer = NaturalnessScorer(device, utmos_repo, sigmos_model_dir, xlsr_model, xlsr_layer)
   ref_emb, ref_prosody = scorer.build_references(native_clips)       # once per language
-  result_a = scorer.score_clips(clips_a, ref_emb, ref_prosody)       # clips = {clip_id: (audio, sr)}
-  result_b = scorer.score_clips(clips_b, ref_emb, ref_prosody)
+  metrics = ["utmos", "sigmos", "fad", "psd"]
+  result_a = scorer.score_clips(clips_a, ref_emb, ref_prosody, metrics)   # clips = {clip_id: (audio, sr)}
+  result_b = scorer.score_clips(clips_b, ref_emb, ref_prosody, metrics)
   rows = compare_results(result_a, result_b, tol_percent, n_boot, seed)
 
 Use the same clip_ids in both sets (same text/description -> same id) so the comparison is paired.
 """
 import math
+import os
 
 import librosa
 import numpy as np
@@ -68,14 +70,17 @@ class NaturalnessScorer:
     def __init__(self, device, utmos_repo, sigmos_model_dir, xlsr_model, xlsr_layer):
         """
         device            "cuda" or "cpu"
-        utmos_repo        torch.hub repo of SpeechMOS, e.g. "tarepan/SpeechMOS:v1.2.0"
+        utmos_repo        torch.hub repo of SpeechMOS, e.g. "tarepan/SpeechMOS:v1.2.0", or a local
+                          folder holding its hubconf.py (works offline, e.g. on the HPC)
         sigmos_model_dir  folder holding the SIGMOS .onnx model
-        xlsr_model        Hugging Face id of the embedding model for FAD, e.g. "facebook/wav2vec2-xls-r-300m"
+        xlsr_model        Hugging Face id of the embedding model for FAD, e.g. "facebook/wav2vec2-xls-r-300m",
+                          or a local folder holding it
         xlsr_layer        hidden layer of that model used for FAD, e.g. 9
         """
         self.device = device
         self.xlsr_layer = xlsr_layer
-        self.utmos = torch.hub.load(utmos_repo, "utmos22_strong", trust_repo=True).to(device).eval()
+        source = "local" if os.path.isdir(utmos_repo) else "github"
+        self.utmos = torch.hub.load(utmos_repo, "utmos22_strong", source=source, trust_repo=True).to(device).eval()
         self.sigmos = SigMOS(model_dir=sigmos_model_dir)
         self.xlsr_processor = Wav2Vec2FeatureExtractor.from_pretrained(xlsr_model)
         self.xlsr = Wav2Vec2Model.from_pretrained(xlsr_model).to(device).eval()

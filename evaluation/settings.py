@@ -84,7 +84,9 @@ class GapClosedOptions(Strict):
 
 
 class IntelligibilityOptions(Strict):
+    whisper_dtype: Literal["float16", "float32"]
     whisper_max_new_tokens: PositiveInt
+    max_clip_seconds: PositiveFloat
     indic_conformer_decoding: Literal["ctc", "rnnt"]
 
 
@@ -146,3 +148,8 @@ def model_folder(paths: Paths, download: DownloadSettings) -> str:
 def speechmos_folder(paths: Paths) -> str:
     """Where the SpeechMOS repository (UTMOS) is cloned: <models>/SpeechMOS."""
     return os.path.join(paths.models, "SpeechMOS")
+
+
+def torch_hub_folder(paths: Paths) -> str:
+    """The torch hub cache that holds the UTMOS checkpoint: <models>/torch_hub."""
+    return os.path.join(paths.models, "torch_hub")

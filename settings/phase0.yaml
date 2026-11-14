@@ -48,7 +48,9 @@ evaluation:
     level_4_from: 0.5
 
   intelligibility:
+    whisper_dtype: float16        # float16 on a GPU; use float32 on cpu
     whisper_max_new_tokens: 440
+    max_clip_seconds: 30.0        # Whisper reads 30 s at most: longer audio is an error, not a silent cut
     indic_conformer_decoding: ctc # ctc | rnnt
 
   speaker:
@@ -85,7 +87,7 @@ claims:
   extractor:
     implementation: rules         # rules: split the caption into sentences, type each by keyword (whole words)
     probability: 0.75             # round 0 captions carry no confidence: every claim gets this value
-    min_chars: 15                 # shorter fragments (headings, list markers) are not claims
+    min_chars: 10                 # shorter fragments (headings, list numbers) are not claims
     fallback_type: Morphology     # a sentence that matches no keyword
     # The first type with a keyword found in the sentence (lowercased) wins, in this order.
     type_keywords:

@@ -1,0 +1,9 @@
+# Conda part of the "evaluation" environment: everything in evaluation/, claims/, training_data/,
+# scripts/download_models.py, scripts/ladder_rung2.py and the tests. Python packages are in
+# requirements.txt next to this file. Build it with the commands in docs/EXPLANATION.md, section 2.
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - git                 # scripts/download_models.py clones SpeechMOS

@@ -1,0 +1,104 @@
+# Phase 0 settings: the evaluation package and the claims package.
+# Checked by evaluation/settings.py and claims/settings.py: unknown or misspelled keys are errors
+# and every key is required (nothing in the code has a default).
+# These values define the results. Folders on your machine go in paths.yaml, not here.
+
+evaluation:
+  languages: [hi, ta]
+  device: cuda                    # cuda | cpu, for every evaluation model
+
+  # Hugging Face repos, each pinned to an exact commit. Downloaded to <models>/<repo_id>.
+  downloads:
+    grader:                       # the official rubric grader (doubt session Q31)
+      repo_id: sarvamai/sarvam-m
+      revision: 01534a53c46f2788e392dbb3d994e0fa8f04d3fd
+      allow_patterns: null
+    whisper:                      # intelligibility, doubt-session version
+      repo_id: openai/whisper-large-v3
+      revision: 06f233fe06e710322aca913c1bc4249a0d71fce1
+      allow_patterns: [config.json, generation_config.json, model.safetensors, preprocessor_config.json,
+                       tokenizer.json, tokenizer_config.json, vocab.json, merges.txt, normalizer.json,
+                       added_tokens.json, special_tokens_map.json]
+    indic_conformer:              # intelligibility, problem-statement version (gated: accept its terms first)
+      repo_id: ai4bharat/indic-conformer-600m-multilingual
+      revision: 2a77d305038dfc502fd9464e7d028b90381976cb
+      allow_patterns: null
+    speaker:                      # speaker similarity and speaker diversity
+      repo_id: microsoft/wavlm-base-plus-sv
+      revision: feb593a6c23c1cc3d9510425c29b0a14d2b07b1e
+      allow_patterns: null
+
+  grader:
+    dtype: bfloat16               # the official precision; anything else is a deviation to report
+    max_new_tokens: 16            # Q31
+    enable_thinking: false        # sarvam-m thinks by default; 16 tokens leave no room for it
+    max_description_chars: 1000   # the grader reads only the first 1,000 characters (Q21)
+    max_description_words: 300    # then at most 300 words (problem statement)
+    timing_collar_seconds: 0.25   # a timed item counts if placed within this of its span
+    max_non_ascii_letter_share: 0.2   # a description with more non-English letters than this is invalid (score 0)
+
+  bootstrap:
+    seed: 0
+    replicates: 1000
+    lower_position: 24            # 0-based positions in the sorted replicate values:
+    upper_position: 974           # the 25th and the 975th of 1,000
+
+  gap_closed:                     # g = (x - baseline) / (ceiling - baseline), doubt session Q3
+    level_3_from: 0.25
+    level_4_from: 0.5
+
+  intelligibility:
+    whisper_max_new_tokens: 440
+    indic_conformer_decoding: ctc # ctc | rnnt
+
+  speaker:
+    same_speaker_threshold: 0.86  # the wavlm-base-plus-sv model card's threshold
+    samples_per_description: 10
+
+  naturalness:
+    speechmos_commit: ed25eacbfa42b99156c36ebec67a733b5dbb9b79   # tarepan/SpeechMOS v1.2.0, cloned to <models>/SpeechMOS
+    speechmos_model: utmos22_strong
+
+claims:
+  composer:
+    max_chars: 1000               # the grader's budget
+    min_probability: 0.5          # a claim below this is expected to lose points, so it is dropped
+    separator: " "                # between two claims in the composed description
+    # Prior per item type: how likely a claim of this type is to match an item of a rubric.
+    # Phase 0 values are equal, so rung 2 tests the budget and nothing else. Later rounds fit
+    # them on the tuning split, never on held-out audio.
+    type_priors:
+      Speaker: 1.0
+      Source: 1.0
+      Morphology: 1.0
+      Pitch: 1.0
+      Timing: 1.0
+      Event: 1.0
+      Channel: 1.0
+      Space: 1.0
+      Other sounds: 1.0
+      Coupling: 1.0
+      Addressee: 1.0
+      Subtext: 1.0
+      Change: 1.0
+
+  extractor:
+    implementation: rules         # rules: split the caption into sentences, type each by keyword (whole words)
+    probability: 0.75             # round 0 captions carry no confidence: every claim gets this value
+    min_chars: 15                 # shorter fragments (headings, list markers) are not claims
+    fallback_type: Morphology     # a sentence that matches no keyword
+    # The first type with a keyword found in the sentence (lowercased) wins, in this order.
+    type_keywords:
+      Event: [laugh, laughs, laughter, laughing, cough, coughs, sigh, sighs, breath, gasp, gasps, click, door, clap, sneeze, cries, crying, sob]
+      Channel: [phone, telephone, microphone, narrowband, bandwidth, codec, clipping, distortion, recording quality, khz, mono, stereo]
+      Space: [room, reverb, reverberation, echo, outdoor, outdoors, indoor, indoors, hall, street, vehicle, acoustic, acoustics]
+      Other sounds: [background, noise, music, traffic, hum, hiss, chatter, snr]
+      Addressee: [addressing, speaking to, talking to, listener, audience]
+      Subtext: [sarcasm, sarcastic, irony, ironic, implies, implying, subtext, hesitant, reluctant, reluctance, masking, underlying]
+      Change: [becomes, shifts, changes, gradually, increasingly, fades, transition, towards the end, by the end]
+      Coupling: [in response, overlaps, overlapping, interrupts, together with]
+      Pitch: [pitch, hz, semitone, semitones, intonation, high-pitched, low-pitched, f0]
+      Timing: [pace, rate, pause, pauses, tempo, syllables per second, rhythm, fast, slow, duration]
+      Speaker: [male, female, man, woman, boy, girl, child, adult, elderly, young, age, accent, native]
+      Source: [breathy, creaky, hoarse, modal, voice quality, whisper, whispered, vocal fry, phonation, nasal]
+      Morphology: [tone, emotion, angry, happy, sad, calm, excited, energetic, warm, tense, stress, emphasis]

@@ -1,0 +1,6 @@
+# Copy this file to paths.yaml (in the same folder) and edit paths.yaml: the folders on your machine.
+# paths.yaml is personal to your machine; it is never committed or packaged.
+# Use full paths. The outputs folder is created if it does not exist.
+
+models: /absolute/path/to/evaluation-models   # the downloaded evaluation models, <models>/<repo_id>
+outputs: /absolute/path/to/outputs            # what the scripts write: one subfolder per run

@@ -184,6 +184,9 @@ Verified here, on a laptop:
 - 66 unit tests pass: rubric score against hand-computed values, the grader's parsing and loop,
   the bootstrap and levels, the composer and extractor, both manifests, CER and speaker counting,
   and rung 2 from start to finish with a fake grader.
+- 3 model tests pass with the real models on an 8 GB GPU: the WavLM speaker embedder (no weights
+  left at random values, the same file gives similarity 1), Whisper large-v3 (Hindi and Tamil
+  devset clips come back in the right script) and UTMOS (a score between 1 and 5).
 
 Not verified, because the model or a large GPU was not available:
 
